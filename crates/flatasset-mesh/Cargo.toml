@@ -1,0 +1,42 @@
+[package]
+name = "flatasset-mesh"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Ultra-fast zero-allocation memory-mapped 3D geometry, meshlet, and skeletal animation container core"
+readme = "README.md"
+keywords = ["mesh", "gltf", "zero-copy", "meshlet", "vulkan"]
+categories = ["graphics", "data-structures", "no-std"]
+
+[dependencies]
+silicon-kit = { workspace = true }
+odd-int = { workspace = true }
+narrow-ptr = { workspace = true }
+zerocopy = { workspace = true }
+memmap2 = { workspace = true, optional = true }
+memchr = { workspace = true }
+thiserror = { workspace = true }
+rayon = { workspace = true, optional = true }
+zstd = { workspace = true, optional = true }
+arc-swap = { workspace = true, optional = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+gltf = { version = "1.4", default-features = false, features = ["import", "utils"] }
+proptest = { workspace = true }
+tempfile = { workspace = true }
+
+[features]
+default = ["std", "mmap", "compiler"]
+std = []
+mmap = ["std", "dep:memmap2"]
+compiler = ["std", "dep:rayon", "dep:zstd"]
+hot-reload = ["std", "dep:arc-swap"]
+
+[[bench]]
+name = "mesh_decode_bench"
+harness = false

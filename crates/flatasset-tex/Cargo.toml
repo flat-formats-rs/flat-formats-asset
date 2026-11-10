@@ -1,0 +1,41 @@
+[package]
+name = "flatasset-tex"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Direct-to-GPU DMA 256-byte row-pitch aligned zero-allocation texture container core"
+readme = "README.md"
+keywords = ["texture", "dma", "vulkan", "d3d12", "zero-copy"]
+categories = ["graphics", "data-structures", "no-std"]
+
+[dependencies]
+silicon-kit = { workspace = true }
+odd-int = { workspace = true }
+narrow-ptr = { workspace = true }
+zerocopy = { workspace = true }
+memmap2 = { workspace = true, optional = true }
+thiserror = { workspace = true }
+rayon = { workspace = true, optional = true }
+zstd = { workspace = true, optional = true }
+arc-swap = { workspace = true, optional = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+image = { version = "0.25", default-features = false, features = ["png"] }
+proptest = { workspace = true }
+tempfile = { workspace = true }
+
+[features]
+default = ["std", "mmap", "compiler"]
+std = []
+mmap = ["std", "dep:memmap2"]
+compiler = ["std", "dep:rayon", "dep:zstd"]
+hot-reload = ["std", "dep:arc-swap"]
+
+[[bench]]
+name = "tex_decode_bench"
+harness = false

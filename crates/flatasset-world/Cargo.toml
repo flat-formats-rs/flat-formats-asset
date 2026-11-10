@@ -1,0 +1,40 @@
+[package]
+name = "flatasset-world"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+silicon-kit = { workspace = true }
+flatasset-mesh = { workspace = true, optional = true }
+flatasset-tex = { workspace = true, optional = true }
+odd-int = { workspace = true }
+narrow-ptr = { workspace = true }
+zerocopy = { workspace = true }
+blake3 = { workspace = true, optional = true }
+zstd = { workspace = true, optional = true }
+thiserror = { workspace = true }
+
+[features]
+default = ["std", "blake3", "zstd"]
+std = ["zerocopy/std"]
+blake3 = ["dep:blake3"]
+zstd = ["dep:zstd"]
+mesh = ["dep:flatasset-mesh"]
+texture = ["dep:flatasset-tex"]
+
+[dev-dependencies]
+criterion = { workspace = true }
+zstd = { workspace = true }
+
+[[bench]]
+name = "qbvh_bench"
+harness = false
+
+[[bench]]
+name = "map_bench"
+harness = false

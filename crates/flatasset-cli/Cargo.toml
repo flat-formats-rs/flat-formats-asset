@@ -1,0 +1,23 @@
+[package]
+name = "flatasset-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[[bin]]
+name = "fla"
+path = "src/main.rs"
+
+[dependencies]
+flatasset-core = { workspace = true }
+flatasset-mesh = { workspace = true }
+flatasset-tex = { workspace = true }
+flatasset-world = { workspace = true }
+flatdemo-core = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+memmap2 = { workspace = true }
