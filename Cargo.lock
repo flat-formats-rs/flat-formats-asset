@@ -542,6 +542,7 @@ dependencies = [
 [[package]]
 name = "flatdemo-core"
 version = "0.1.0"
+source = "git+https://github.com/flat-formats-rs/flat-formats-demo.git?branch=dev#86fa4f4fe51ab8089c5a81b1ba85d221ca4c7eda"
 dependencies = [
  "blake3",
  "narrow-ptr",
@@ -823,6 +824,7 @@ dependencies = [
 [[package]]
 name = "narrow-ptr"
 version = "0.1.0"
+source = "git+https://github.com/ulquiorracode/narrow-ptr-rs.git?branch=dev#a78f5eea9de9911d90795ed68951064cc85b5109"
 dependencies = [
  "odd-int",
  "zerocopy",
@@ -840,6 +842,7 @@ dependencies = [
 [[package]]
 name = "odd-int"
 version = "0.1.0"
+source = "git+https://github.com/ulquiorracode/odd-int-rs.git?branch=dev#9cee079477156dc0af6041926d9457c715d6b68b"
 dependencies = [
  "paste",
  "zerocopy",
@@ -1153,6 +1156,7 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 [[package]]
 name = "silicon-kit"
 version = "0.1.0"
+source = "git+https://github.com/ulquiorracode/silicon-kit-rs.git?branch=dev#17e25b1b919f9615f85d841c083c1ddebec0b70d"
 dependencies = [
  "zerocopy",
 ]
