@@ -37,8 +37,14 @@ fn bench_real_map(c: &mut Criterion) {
     );
 
     for (name, bsp_path, flw_path) in maps {
-        let bsp_bytes = fs::read(bsp_path).unwrap();
-        let flw_bytes = fs::read(flw_path).unwrap();
+        let Ok(bsp_bytes) = fs::read(bsp_path) else {
+            eprintln!("{:<16} (files not found, skipping benchmark)", name);
+            continue;
+        };
+        let Ok(flw_bytes) = fs::read(flw_path) else {
+            eprintln!("{:<16} (flw not found, skipping benchmark)", name);
+            continue;
+        };
         let bsp_zst = zstd::encode_all(&bsp_bytes[..], 3).unwrap();
         let flw_zst = zstd::encode_all(&flw_bytes[..], 3).unwrap();
 
@@ -56,10 +62,14 @@ fn bench_real_map(c: &mut Criterion) {
         "=========================================================================================\n"
     );
 
-    let bsp_bytes = fs::read("D:/Repo/CS16/hlmsl/test_maps/de_inferno.bsp")
-        .expect("Failed to read de_inferno.bsp");
-    let flw_bytes =
-        fs::read("D:/Repo/flatworld-rs/de_inferno.flw").expect("Failed to read de_inferno.flw");
+    let Ok(bsp_bytes) = fs::read("D:/Repo/CS16/hlmsl/test_maps/de_inferno.bsp") else {
+        eprintln!("Bench map files not present on disk, skipping detailed criterion benchmarks.");
+        return;
+    };
+    let Ok(flw_bytes) = fs::read("D:/Repo/flatworld-rs/de_inferno.flw") else {
+        eprintln!("Bench flw file not present on disk, skipping detailed criterion benchmarks.");
+        return;
+    };
 
     // 1. Raw Container Mount / Ingestion Benchmark
     c.bench_function("inferno_flw_mount_zero_alloc", |b| {
