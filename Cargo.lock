@@ -476,8 +476,8 @@ dependencies = [
  "flatasset-tex",
  "flatasset-world",
  "flatdemo-core",
- "narrow-ptr 0.1.0",
- "odd-int 0.1.0",
+ "narrow-ptr",
+ "odd-int",
  "silicon-kit",
  "thiserror",
  "zerocopy",
@@ -493,8 +493,8 @@ dependencies = [
  "gltf",
  "memchr",
  "memmap2",
- "narrow-ptr 0.1.0",
- "odd-int 0.1.0",
+ "narrow-ptr",
+ "odd-int",
  "proptest",
  "rayon",
  "silicon-kit",
@@ -512,8 +512,8 @@ dependencies = [
  "criterion",
  "image",
  "memmap2",
- "narrow-ptr 0.1.0",
- "odd-int 0.1.0",
+ "narrow-ptr",
+ "odd-int",
  "proptest",
  "rayon",
  "silicon-kit",
@@ -531,8 +531,8 @@ dependencies = [
  "criterion",
  "flatasset-mesh",
  "flatasset-tex",
- "narrow-ptr 0.1.0",
- "odd-int 0.1.0",
+ "narrow-ptr",
+ "odd-int",
  "silicon-kit",
  "thiserror",
  "zerocopy",
@@ -544,8 +544,8 @@ name = "flatdemo-core"
 version = "0.1.0"
 dependencies = [
  "blake3",
- "narrow-ptr 0.1.0 (git+https://github.com/ulquiorracode/narrow-ptr-rs.git?branch=dev)",
- "odd-int 0.1.0 (git+https://github.com/ulquiorracode/odd-int-rs.git?branch=dev)",
+ "narrow-ptr",
+ "odd-int",
  "silicon-kit",
  "thiserror",
  "zerocopy",
@@ -824,15 +824,7 @@ dependencies = [
 name = "narrow-ptr"
 version = "0.1.0"
 dependencies = [
- "odd-int 0.1.0 (git+https://github.com/ulquiorracode/odd-int-rs.git?branch=dev)",
-]
-
-[[package]]
-name = "narrow-ptr"
-version = "0.1.0"
-source = "git+https://github.com/ulquiorracode/narrow-ptr-rs.git?branch=dev#a78f5eea9de9911d90795ed68951064cc85b5109"
-dependencies = [
- "odd-int 0.1.0 (git+https://github.com/ulquiorracode/odd-int-rs.git?branch=dev)",
+ "odd-int",
  "zerocopy",
 ]
 
@@ -848,14 +840,6 @@ dependencies = [
 [[package]]
 name = "odd-int"
 version = "0.1.0"
-dependencies = [
- "paste",
-]
-
-[[package]]
-name = "odd-int"
-version = "0.1.0"
-source = "git+https://github.com/ulquiorracode/odd-int-rs.git?branch=dev#9cee079477156dc0af6041926d9457c715d6b68b"
 dependencies = [
  "paste",
  "zerocopy",

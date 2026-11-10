@@ -4,8 +4,8 @@ use std::vec::Vec;
 use zerocopy::IntoBytes;
 
 use crate::header::{
-    CONTAINER_PAYLOAD_OFFSET, CompressionType, FLATWORLD_MAGIC, FLATWORLD_VERSION, FlatWorldHeader,
-    FlatWorldLumpDesc, LumpType,
+    CompressionType, FlatWorldHeader, FlatWorldLumpDesc, LumpType, CONTAINER_PAYLOAD_OFFSET,
+    FLATWORLD_MAGIC, FLATWORLD_VERSION,
 };
 
 /// Builder for constructing valid FlatWorld (.flw) containers.

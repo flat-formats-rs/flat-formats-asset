@@ -2,7 +2,7 @@
 
 use flatasset_mesh::{
     FlatAttributeVertex, FlatMeshError, FlatMeshHeader, FlatMeshLumpEntry, FlatMeshView,
-    FlatPackedNormal, FlatPositionVertex, FormatSignature, LUMP_FLAG_REQUIRED, LumpId,
+    FlatPackedNormal, FlatPositionVertex, FormatSignature, LumpId, LUMP_FLAG_REQUIRED,
 };
 use proptest::prelude::*;
 use zerocopy::IntoBytes;

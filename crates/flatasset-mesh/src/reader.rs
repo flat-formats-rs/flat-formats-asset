@@ -192,9 +192,7 @@ impl<'a> FlatMeshView<'a> {
         // SAFETY: Bounds and alignment invariants verified during FlatMeshView::new().
         // Caller guarantees lump exists.
         unsafe {
-            let lump = self
-                .find_lump(LumpId::PositionStream)
-                .unwrap_unchecked();
+            let lump = self.find_lump(LumpId::PositionStream).unwrap_unchecked();
             let ptr = self.bytes.as_ptr().add(lump.offset as usize) as *const FlatPositionVertex;
             core::slice::from_raw_parts(ptr, lump.element_count as usize)
         }
@@ -226,9 +224,7 @@ impl<'a> FlatMeshView<'a> {
         // SAFETY: Bounds and alignment invariants verified during FlatMeshView::new().
         // Caller guarantees lump exists.
         unsafe {
-            let lump = self
-                .find_lump(LumpId::AttributeStream)
-                .unwrap_unchecked();
+            let lump = self.find_lump(LumpId::AttributeStream).unwrap_unchecked();
             let ptr = self.bytes.as_ptr().add(lump.offset as usize) as *const FlatAttributeVertex;
             core::slice::from_raw_parts(ptr, lump.element_count as usize)
         }
@@ -282,11 +278,9 @@ impl<'a> FlatMeshView<'a> {
             return Ok(None);
         };
         let bytes = self.lump_bytes(lump)?;
-        let (slice_ref, _) = Ref::<&'a [u8], [u8]>::from_prefix_with_elems(
-            bytes,
-            lump.element_count as usize,
-        )
-        .map_err(|_| FlatMeshError::InvalidLayout)?;
+        let (slice_ref, _) =
+            Ref::<&'a [u8], [u8]>::from_prefix_with_elems(bytes, lump.element_count as usize)
+                .map_err(|_| FlatMeshError::InvalidLayout)?;
         Ok(Some(Ref::into_ref(slice_ref)))
     }
 

@@ -22,11 +22,12 @@ flatasset-core = { path = "crates/flatasset-core", version = "0.1.0" }
 flatasset-mesh = { path = "crates/flatasset-mesh", version = "0.1.0" }
 flatasset-tex = { path = "crates/flatasset-tex", version = "0.1.0" }
 flatasset-world = { path = "crates/flatasset-world", version = "0.1.0" }
-flatdemo-core = { path = "../flat-formats-demo/core/flatdemo-core", version = "0.1.0" }
+flatdemo-core = { git = "https://github.com/flat-formats-rs/flat-formats-demo.git", branch = "dev", version = "0.1.0" }
 
-silicon-kit = { path = "../../silicon-kit-rs", version = "0.1.0" }
-odd-int = { path = "../../odd-int-rs", version = "0.1.0" }
-narrow-ptr = { path = "../../narrow-ptr-rs", version = "0.1.0" }
+silicon-kit = { git = "https://github.com/ulquiorracode/silicon-kit-rs.git", branch = "dev", default-features = false, features = ["bits", "snorm", "f16c", "zerocopy", "streaming"] }
+odd-int = { git = "https://github.com/ulquiorracode/odd-int-rs.git", branch = "dev", default-features = false, features = ["zerocopy"] }
+narrow-ptr = { git = "https://github.com/ulquiorracode/narrow-ptr-rs.git", branch = "dev", default-features = false, features = ["odd-int", "zerocopy"] }
+
 zerocopy = { version = "0.8.63", features = ["derive"] }
 blake3 = "1.8.7"
 zstd = "0.14.3"
@@ -40,6 +41,18 @@ arc-swap = "1.7.1"
 tempfile = "3.17.1"
 anyhow = "1.0.104"
 proptest = "1.4.0"
+
+[patch."https://github.com/flat-formats-rs/flat-formats-demo.git"]
+flatdemo-core = { path = "../flat-formats-demo/core/flatdemo-core" }
+
+[patch."https://github.com/ulquiorracode/silicon-kit-rs.git"]
+silicon-kit = { path = "../../silicon-kit-rs" }
+
+[patch."https://github.com/ulquiorracode/odd-int-rs.git"]
+odd-int = { path = "../../odd-int-rs" }
+
+[patch."https://github.com/ulquiorracode/narrow-ptr-rs.git"]
+narrow-ptr = { path = "../../narrow-ptr-rs" }
 
 [profile.release]
 opt-level = 3

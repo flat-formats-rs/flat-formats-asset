@@ -19,7 +19,7 @@ pub mod vertex;
 
 pub use error::{FlatMeshError, Result};
 pub use header::{FlatMeshHeader, FormatSignature};
-pub use lump::{FlatMeshLumpEntry, LUMP_FLAG_REQUIRED, LumpId};
+pub use lump::{FlatMeshLumpEntry, LumpId, LUMP_FLAG_REQUIRED};
 pub use meshlet::{FlatDrawIndexedIndirect, FlatMeshletDesc};
 pub use reader::FlatMeshView;
 pub use vertex::{FlatAttributeVertex, FlatPackedNormal, FlatPositionVertex, FlatSkinVertex};

@@ -1,6 +1,6 @@
 use flatasset_mesh::{
     FlatAttributeVertex, FlatMeshHeader, FlatMeshLumpEntry, FlatMeshView, FlatPackedNormal,
-    FlatPositionVertex, FormatSignature, LUMP_FLAG_REQUIRED, LumpId,
+    FlatPositionVertex, FormatSignature, LumpId, LUMP_FLAG_REQUIRED,
 };
 use zerocopy::IntoBytes;
 

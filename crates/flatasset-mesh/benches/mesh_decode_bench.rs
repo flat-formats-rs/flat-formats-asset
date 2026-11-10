@@ -1,7 +1,7 @@
-use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use flatasset_mesh::{
     FlatAttributeVertex, FlatMeshHeader, FlatMeshLumpEntry, FlatMeshView, FlatPositionVertex,
-    FormatSignature, LUMP_FLAG_REQUIRED, LumpId,
+    FormatSignature, LumpId, LUMP_FLAG_REQUIRED,
 };
 use zerocopy::IntoBytes;
 

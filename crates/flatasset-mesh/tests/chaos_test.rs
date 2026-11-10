@@ -1,8 +1,8 @@
 //! Chaos and fault injection resilience tests for FlatMesh.
 
 use flatasset_mesh::{
-    FlatMeshError, FlatMeshHeader, FlatMeshLumpEntry, FlatMeshView, FormatSignature,
-    LUMP_FLAG_REQUIRED, LumpId,
+    FlatMeshError, FlatMeshHeader, FlatMeshLumpEntry, FlatMeshView, FormatSignature, LumpId,
+    LUMP_FLAG_REQUIRED,
 };
 use zerocopy::IntoBytes;
 

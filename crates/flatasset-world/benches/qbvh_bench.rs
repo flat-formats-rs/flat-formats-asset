@@ -1,7 +1,7 @@
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use flatasset_world::{
-    FlatWorldBuilder, FlatWorldView, QBVH_LEAF_MASK, QBvh4Node, header::LumpType, pvs::PvsView,
-    qbvh::quantize_aabb,
+    header::LumpType, pvs::PvsView, qbvh::quantize_aabb, FlatWorldBuilder, FlatWorldView,
+    QBvh4Node, QBVH_LEAF_MASK,
 };
 use zerocopy::IntoBytes;
 

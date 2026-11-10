@@ -1,4 +1,4 @@
-use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use flatasset_tex::{FlatMipDesc, FlatTexHeader, FlatTexView, FormatSignature, VkFormat};
 use image::{ImageBuffer, Rgba};
 use std::io::Cursor;

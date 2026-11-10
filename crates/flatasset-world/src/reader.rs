@@ -3,7 +3,7 @@
 use zerocopy::FromBytes;
 
 use crate::{
-    header::{FLATWORLD_MAGIC, FLATWORLD_VERSION, FlatWorldHeader, FlatWorldLumpDesc, LumpType},
+    header::{FlatWorldHeader, FlatWorldLumpDesc, LumpType, FLATWORLD_MAGIC, FLATWORLD_VERSION},
     meshlet::FlatWorldMeshlet,
     pvs::PvsView,
     qbvh::QBvh4Node,
