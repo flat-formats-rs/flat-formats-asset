@@ -496,12 +496,10 @@ dependencies = [
  "narrow-ptr",
  "odd-int",
  "proptest",
- "rayon",
  "silicon-kit",
  "tempfile",
  "thiserror",
  "zerocopy",
- "zstd",
 ]
 
 [[package]]
@@ -515,12 +513,10 @@ dependencies = [
  "narrow-ptr",
  "odd-int",
  "proptest",
- "rayon",
  "silicon-kit",
  "tempfile",
  "thiserror",
  "zerocopy",
- "zstd",
 ]
 
 [[package]]

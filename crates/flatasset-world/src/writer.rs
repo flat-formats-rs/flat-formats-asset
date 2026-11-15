@@ -1,6 +1,6 @@
 //! FlatWorld container builder and serializer.
 
-use std::vec::Vec;
+use alloc::vec::Vec;
 use zerocopy::IntoBytes;
 
 use crate::header::{
