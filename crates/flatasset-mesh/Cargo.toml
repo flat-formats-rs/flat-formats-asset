@@ -20,8 +20,6 @@ zerocopy = { workspace = true }
 memmap2 = { workspace = true, optional = true }
 memchr = { workspace = true }
 thiserror = { workspace = true }
-rayon = { workspace = true, optional = true }
-zstd = { workspace = true, optional = true }
 arc-swap = { workspace = true, optional = true }
 
 [dev-dependencies]
@@ -34,7 +32,7 @@ tempfile = { workspace = true }
 default = ["std", "mmap", "compiler"]
 std = []
 mmap = ["std", "dep:memmap2"]
-compiler = ["std", "dep:rayon", "dep:zstd"]
+compiler = ["std"]
 hot-reload = ["std", "dep:arc-swap"]
 
 [[bench]]

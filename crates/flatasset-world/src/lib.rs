@@ -5,11 +5,16 @@
 //! Synthesizes modern GPU meshlets, 4-way SIMD Quantized BVH (Q-BVH4),
 //! succinct bitmask PVS, and strongly-typed KDL scene graphs.
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
 pub mod header;
 pub mod meshlet;
 pub mod pvs;
 pub mod qbvh;
 pub mod reader;
+#[cfg(feature = "builder")]
 pub mod writer;
 
 pub use header::{
@@ -20,4 +25,5 @@ pub use meshlet::FlatWorldMeshlet;
 pub use pvs::PvsView;
 pub use qbvh::{quantize_aabb, QBvh4Node, QBVH_EMPTY_CHILD, QBVH_LEAF_MASK};
 pub use reader::{FlatWorldError, FlatWorldView};
+#[cfg(feature = "builder")]
 pub use writer::FlatWorldBuilder;

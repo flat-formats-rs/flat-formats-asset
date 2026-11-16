@@ -143,19 +143,19 @@ impl<'a> FlatWorldView<'a> {
     pub fn decompressed_lump_bytes(
         &self,
         lump_type: LumpType,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, FlatWorldError> {
+    ) -> Result<alloc::borrow::Cow<'a, [u8]>, FlatWorldError> {
         let lump = self
             .find_lump(lump_type)
             .ok_or(FlatWorldError::LumpNotFound(lump_type))?;
         let raw = self.lump_bytes(lump_type)?;
 
         match lump.compression_type {
-            0 => Ok(std::borrow::Cow::Borrowed(raw)),
+            0 => Ok(alloc::borrow::Cow::Borrowed(raw)),
             #[cfg(feature = "zstd")]
             2 => {
                 let decompressed =
                     zstd::decode_all(raw).map_err(|_| FlatWorldError::DecompressionFailed)?;
-                Ok(std::borrow::Cow::Owned(decompressed))
+                Ok(alloc::borrow::Cow::Owned(decompressed))
             }
             other => Err(FlatWorldError::UnsupportedCompression(other)),
         }
