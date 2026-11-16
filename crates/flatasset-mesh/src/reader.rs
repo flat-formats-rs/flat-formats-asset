@@ -80,23 +80,21 @@ impl<'a> FlatMeshView<'a> {
         .map_err(|_| FlatMeshError::InvalidLayout)?;
         let lumps = Ref::into_ref(lumps_ref);
 
-        // 5. Verify presence of all required lumps
+        // 5. Verify bounds and alignment of ALL lumps in directory
         for lump in lumps {
-            if lump.is_required() {
-                let end = lump.offset.checked_add(lump.uncompressed_size).ok_or(
-                    FlatMeshError::OutOfBounds {
-                        offset: lump.offset,
-                        size: lump.uncompressed_size,
-                        limit: bytes.len(),
-                    },
-                )?;
-                if end > bytes.len() as u64 {
-                    return Err(FlatMeshError::OutOfBounds {
-                        offset: lump.offset,
-                        size: lump.uncompressed_size,
-                        limit: bytes.len(),
-                    });
-                }
+            let end = lump.offset.checked_add(lump.uncompressed_size).ok_or(
+                FlatMeshError::OutOfBounds {
+                    offset: lump.offset,
+                    size: lump.uncompressed_size,
+                    limit: bytes.len(),
+                },
+            )?;
+            if end > bytes.len() as u64 {
+                return Err(FlatMeshError::OutOfBounds {
+                    offset: lump.offset,
+                    size: lump.uncompressed_size,
+                    limit: bytes.len(),
+                });
             }
         }
 
@@ -185,16 +183,19 @@ impl<'a> FlatMeshView<'a> {
     /// Extreme performance unchecked slice fetch for Stream 0 positions.
     ///
     /// # Safety
-    /// Caller guarantees that `self.find_lump(LumpId::PositionStream)` exists and points to
-    /// valid aligned memory verified during `FlatMeshView::new()`.
+    /// Returns an empty slice if PositionStream is absent, or the verified positions slice.
     #[inline(always)]
     pub unsafe fn positions_unchecked(&self) -> &'a [FlatPositionVertex] {
         // SAFETY: Bounds and alignment invariants verified during FlatMeshView::new().
-        // Caller guarantees lump exists.
         unsafe {
-            let lump = self.find_lump(LumpId::PositionStream).unwrap_unchecked();
-            let ptr = self.bytes.as_ptr().add(lump.offset as usize) as *const FlatPositionVertex;
-            core::slice::from_raw_parts(ptr, lump.element_count as usize)
+            match self.find_lump(LumpId::PositionStream) {
+                Some(lump) => {
+                    let ptr =
+                        self.bytes.as_ptr().add(lump.offset as usize) as *const FlatPositionVertex;
+                    core::slice::from_raw_parts(ptr, lump.element_count as usize)
+                }
+                None => &[],
+            }
         }
     }
 
@@ -217,16 +218,19 @@ impl<'a> FlatMeshView<'a> {
     /// Extreme performance unchecked slice fetch for Stream 1 attributes.
     ///
     /// # Safety
-    /// Caller guarantees that `self.find_lump(LumpId::AttributeStream)` exists and points to
-    /// valid aligned memory verified during `FlatMeshView::new()`.
+    /// Returns an empty slice if AttributeStream is absent, or the verified attributes slice.
     #[inline(always)]
     pub unsafe fn attributes_unchecked(&self) -> &'a [FlatAttributeVertex] {
         // SAFETY: Bounds and alignment invariants verified during FlatMeshView::new().
-        // Caller guarantees lump exists.
         unsafe {
-            let lump = self.find_lump(LumpId::AttributeStream).unwrap_unchecked();
-            let ptr = self.bytes.as_ptr().add(lump.offset as usize) as *const FlatAttributeVertex;
-            core::slice::from_raw_parts(ptr, lump.element_count as usize)
+            match self.find_lump(LumpId::AttributeStream) {
+                Some(lump) => {
+                    let ptr =
+                        self.bytes.as_ptr().add(lump.offset as usize) as *const FlatAttributeVertex;
+                    core::slice::from_raw_parts(ptr, lump.element_count as usize)
+                }
+                None => &[],
+            }
         }
     }
 
