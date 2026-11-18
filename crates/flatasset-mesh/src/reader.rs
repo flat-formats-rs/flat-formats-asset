@@ -96,6 +96,16 @@ impl<'a> FlatMeshView<'a> {
                     limit: bytes.len(),
                 });
             }
+
+            // Invariant: element_count * element_stride must not exceed uncompressed_size
+            if lump.element_stride > 0 {
+                let required_span = (lump.element_count as u64)
+                    .checked_mul(lump.element_stride as u64)
+                    .ok_or(FlatMeshError::InvalidLayout)?;
+                if required_span > lump.uncompressed_size {
+                    return Err(FlatMeshError::InvalidLayout);
+                }
+            }
         }
 
         Ok(Self {

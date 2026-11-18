@@ -15,8 +15,8 @@ impl<'a> PvsView<'a> {
     /// Creates a PvsView over raw memory-mapped slice.
     #[inline]
     pub fn new(cluster_count: usize, data: &'a [u8]) -> Option<Self> {
-        let row_stride_bytes = cluster_count.div_ceil(8);
-        let required_bytes = cluster_count * row_stride_bytes;
+        let row_stride_bytes = cluster_count.checked_add(7)? / 8;
+        let required_bytes = cluster_count.checked_mul(row_stride_bytes)?;
         if data.len() < required_bytes {
             return None;
         }
