@@ -10,7 +10,10 @@ pub const QBVH_LEAF_MASK: u32 = 0x8000_0000;
 /// Sentinel value representing an empty/null child slot.
 pub const QBVH_EMPTY_CHILD: u32 = 0xFFFF_FFFF;
 
-/// 64-byte SIMD 4-way Quantized BVH Node (Q-BVH4).
+/// Alias representing the 64-byte Compressed BVH node (C-BVH4).
+pub type CBvh4Node = QBvh4Node;
+
+/// 64-byte SIMD 4-way Quantized BVH Node (Q-BVH4 / C-BVH4).
 #[repr(C)]
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, KnownLayout, Immutable)]
 pub struct QBvh4Node {
@@ -114,6 +117,129 @@ impl QBvh4Node {
         {
             self.intersect_ray_scalar(origin, inv_dir, t_min, t_max, world_min, world_max)
         }
+    }
+
+    /// Tests a precomputed `ScaledRay` against all 4 child AABBs with zero per-node dequantization ALU instructions.
+    #[inline]
+    pub fn intersect_scaled_ray(&self, ray: &ScaledRay) -> (u8, [f32; 4]) {
+        #[cfg(target_arch = "x86_64")]
+        {
+            let prep = ray.prepare_sse2();
+            // SAFETY: SSE2 is baseline on x86_64.
+            unsafe { self.intersect_prepared_scaled_ray_sse2(&prep) }
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            self.intersect_scaled_ray_scalar(ray)
+        }
+    }
+
+    /// Tests all 4 child AABBs against a pre-broadcasted `PreparedScaledRay` (zero broadcast overhead in hot loops).
+    ///
+    /// # Safety
+    ///
+    /// Caller must ensure that SSE2 instructions are supported by the target CPU (baseline on x86_64).
+    #[cfg(target_arch = "x86_64")]
+    #[inline]
+    pub unsafe fn intersect_prepared_scaled_ray_sse2(
+        &self,
+        ray: &PreparedScaledRay,
+    ) -> (u8, [f32; 4]) {
+        use core::arch::x86_64::*;
+
+        let zero_i = _mm_setzero_si128();
+
+        let unpack_u16_f32 = |ptr: *const u16| -> __m128 {
+            let val64 = (ptr as *const i64).read_unaligned();
+            let vec64 = _mm_set_epi64x(0, val64);
+            let vec32 = _mm_unpacklo_epi16(vec64, zero_i);
+            _mm_cvtepi32_ps(vec32)
+        };
+
+        let min_x_f = unpack_u16_f32(self.min_x.as_ptr());
+        let max_x_f = unpack_u16_f32(self.max_x.as_ptr());
+        let min_y_f = unpack_u16_f32(self.min_y.as_ptr());
+        let max_y_f = unpack_u16_f32(self.max_y.as_ptr());
+        let min_z_f = unpack_u16_f32(self.min_z.as_ptr());
+        let max_z_f = unpack_u16_f32(self.max_z.as_ptr());
+
+        // Zero dequantization ALU! (6 mul + 6 add eliminated per node)
+        let t0_x = _mm_mul_ps(_mm_sub_ps(min_x_f, ray.orig_x), ray.idir_x);
+        let t1_x = _mm_mul_ps(_mm_sub_ps(max_x_f, ray.orig_x), ray.idir_x);
+        let tx_min = _mm_min_ps(t0_x, t1_x);
+        let tx_max = _mm_max_ps(t0_x, t1_x);
+
+        let t0_y = _mm_mul_ps(_mm_sub_ps(min_y_f, ray.orig_y), ray.idir_y);
+        let t1_y = _mm_mul_ps(_mm_sub_ps(max_y_f, ray.orig_y), ray.idir_y);
+        let ty_min = _mm_min_ps(t0_y, t1_y);
+        let ty_max = _mm_max_ps(t0_y, t1_y);
+
+        let t0_z = _mm_mul_ps(_mm_sub_ps(min_z_f, ray.orig_z), ray.idir_z);
+        let t1_z = _mm_mul_ps(_mm_sub_ps(max_z_f, ray.orig_z), ray.idir_z);
+        let tz_min = _mm_min_ps(t0_z, t1_z);
+        let tz_max = _mm_max_ps(t0_z, t1_z);
+
+        let entry = _mm_max_ps(_mm_max_ps(tx_min, ty_min), _mm_max_ps(tz_min, ray.t_min));
+        let exit = _mm_min_ps(_mm_min_ps(tx_max, ty_max), _mm_min_ps(tz_max, ray.t_max));
+
+        // Active children mask: child != QBVH_EMPTY_CHILD
+        let children_vec = (self.children.as_ptr() as *const __m128i).read_unaligned();
+        let empty_vec = _mm_set1_epi32(-1);
+        let is_empty = _mm_cmpeq_epi32(children_vec, empty_vec);
+        let is_active = _mm_castsi128_ps(_mm_andnot_si128(is_empty, empty_vec));
+
+        let hit_cmp = _mm_cmple_ps(entry, exit);
+        let valid_hits = _mm_and_ps(hit_cmp, is_active);
+        let hit_mask = (_mm_movemask_ps(valid_hits) & 0x0F) as u8;
+
+        let max_float = _mm_set1_ps(f32::MAX);
+        let final_entry = _mm_or_ps(
+            _mm_and_ps(valid_hits, entry),
+            _mm_andnot_ps(valid_hits, max_float),
+        );
+
+        let mut t_enters = [f32::MAX; 4];
+        _mm_storeu_ps(t_enters.as_mut_ptr(), final_entry);
+
+        (hit_mask, t_enters)
+    }
+
+    /// Scalar fallback for `ScaledRay`.
+    #[inline]
+    pub fn intersect_scaled_ray_scalar(&self, ray: &ScaledRay) -> (u8, [f32; 4]) {
+        let mut hit_mask = 0u8;
+        let mut t_enters = [f32::MAX; 4];
+
+        for (i, t_enter) in t_enters.iter_mut().enumerate() {
+            if !self.is_active(i) {
+                continue;
+            }
+
+            let t0_x = (self.min_x[i] as f32 - ray.orig_scaled[0]) * ray.inv_dir_scaled[0];
+            let t1_x = (self.max_x[i] as f32 - ray.orig_scaled[0]) * ray.inv_dir_scaled[0];
+            let tx_min = t0_x.min(t1_x);
+            let tx_max = t0_x.max(t1_x);
+
+            let t0_y = (self.min_y[i] as f32 - ray.orig_scaled[1]) * ray.inv_dir_scaled[1];
+            let t1_y = (self.max_y[i] as f32 - ray.orig_scaled[1]) * ray.inv_dir_scaled[1];
+            let ty_min = t0_y.min(t1_y);
+            let ty_max = t0_y.max(t1_y);
+
+            let t0_z = (self.min_z[i] as f32 - ray.orig_scaled[2]) * ray.inv_dir_scaled[2];
+            let t1_z = (self.max_z[i] as f32 - ray.orig_scaled[2]) * ray.inv_dir_scaled[2];
+            let tz_min = t0_z.min(t1_z);
+            let tz_max = t0_z.max(t1_z);
+
+            let entry = tx_min.max(ty_min).max(tz_min).max(ray.t_min);
+            let exit = tx_max.min(ty_max).min(tz_max).min(ray.t_max);
+
+            if entry <= exit {
+                hit_mask |= 1 << i;
+                *t_enter = entry;
+            }
+        }
+
+        (hit_mask, t_enters)
     }
 
     /// Tests a ray against all 4 child AABBs using pure scalar arithmetic.
@@ -416,6 +542,99 @@ pub fn quantize_aabb(
     (q_min, q_max)
 }
 
+/// Precomputed root-scaled ray for zero-ALU dequantization traversal.
+///
+/// In standard world space:
+///     t = (box - orig) * inv_dir
+/// In 16-bit quantized space [0..65535]:
+///     box = world_min + u16_val * extent
+/// By defining:
+///     orig_scaled = (orig - world_min) / extent
+///     inv_dir_scaled = inv_dir * extent
+///
+/// We have:
+///     t = (u16_val - orig_scaled) * inv_dir_scaled
+///
+/// This mathematically cancels out extent, producing the EXACT SAME world-space distance `t`,
+/// while completely eliminating 6 multiplications and 6 additions per node in the traversal hot loop!
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ScaledRay {
+    pub orig_scaled: [f32; 3],
+    pub inv_dir_scaled: [f32; 3],
+    pub t_min: f32,
+    pub t_max: f32,
+}
+
+impl ScaledRay {
+    /// Constructs a ScaledRay by transforming a world-space ray once at the traversal root.
+    #[inline]
+    pub fn from_world(
+        origin: [f32; 3],
+        inv_dir: [f32; 3],
+        t_min: f32,
+        t_max: f32,
+        world_min: [f32; 3],
+        world_max: [f32; 3],
+    ) -> Self {
+        let extent_x = (world_max[0] - world_min[0]) / 65535.0;
+        let extent_y = (world_max[1] - world_min[1]) / 65535.0;
+        let extent_z = (world_max[2] - world_min[2]) / 65535.0;
+
+        let orig_scaled = [
+            (origin[0] - world_min[0]) / extent_x,
+            (origin[1] - world_min[1]) / extent_y,
+            (origin[2] - world_min[2]) / extent_z,
+        ];
+        let inv_dir_scaled = [
+            inv_dir[0] * extent_x,
+            inv_dir[1] * extent_y,
+            inv_dir[2] * extent_z,
+        ];
+
+        Self {
+            orig_scaled,
+            inv_dir_scaled,
+            t_min,
+            t_max,
+        }
+    }
+
+    /// Pre-broadcasts the scaled ray parameters into SSE vector registers for repeated traversal.
+    #[cfg(target_arch = "x86_64")]
+    #[inline]
+    pub fn prepare_sse2(&self) -> PreparedScaledRay {
+        use core::arch::x86_64::*;
+        // SAFETY: SSE2 is baseline on x86_64.
+        unsafe {
+            PreparedScaledRay {
+                orig_x: _mm_set1_ps(self.orig_scaled[0]),
+                orig_y: _mm_set1_ps(self.orig_scaled[1]),
+                orig_z: _mm_set1_ps(self.orig_scaled[2]),
+                idir_x: _mm_set1_ps(self.inv_dir_scaled[0]),
+                idir_y: _mm_set1_ps(self.inv_dir_scaled[1]),
+                idir_z: _mm_set1_ps(self.inv_dir_scaled[2]),
+                t_min: _mm_set1_ps(self.t_min),
+                t_max: _mm_set1_ps(self.t_max),
+            }
+        }
+    }
+}
+
+/// Pre-broadcasted vector representation of a `ScaledRay` for zero-overhead loop traversal.
+#[cfg(target_arch = "x86_64")]
+#[derive(Debug, Clone, Copy)]
+pub struct PreparedScaledRay {
+    pub orig_x: core::arch::x86_64::__m128,
+    pub orig_y: core::arch::x86_64::__m128,
+    pub orig_z: core::arch::x86_64::__m128,
+    pub idir_x: core::arch::x86_64::__m128,
+    pub idir_y: core::arch::x86_64::__m128,
+    pub idir_z: core::arch::x86_64::__m128,
+    pub t_min: core::arch::x86_64::__m128,
+    pub t_max: core::arch::x86_64::__m128,
+}
+
 /// Precomputed ray parameters for accelerated traversal through world bounds.
 #[derive(Debug, Clone, Copy)]
 pub struct PreparedRay {
@@ -571,6 +790,94 @@ mod tests {
                     simd_mask, scalar_mask,
                     "AABB mask mismatch at step {step}: SIMD {simd_mask:#b} vs Scalar {scalar_mask:#b}"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn test_scaled_ray_matches_standard_raycast() {
+        let world_min = [-1024.0, -1024.0, -512.0];
+        let world_max = [1024.0, 1024.0, 512.0];
+
+        let mut node = QBvh4Node::empty();
+        for i in 0..4 {
+            let offset = i as f32 * 80.0;
+            let (q_min, q_max) = quantize_aabb(
+                [-100.0 + offset, -50.0, -20.0],
+                [50.0 + offset, 50.0, 20.0],
+                world_min,
+                world_max,
+            );
+            node.min_x[i] = q_min[0];
+            node.max_x[i] = q_max[0];
+            node.min_y[i] = q_min[1];
+            node.max_y[i] = q_max[1];
+            node.min_z[i] = q_min[2];
+            node.max_z[i] = q_max[2];
+            node.children[i] = QBVH_LEAF_MASK | (i as u32);
+        }
+
+        for step in 0..100 {
+            let angle = (step as f32) * 0.1;
+            let origin = [angle.cos() * 200.0, angle.sin() * 200.0, 150.0];
+            let dir = [-origin[0], -origin[1], -origin[2]];
+            let inv_dir = [
+                if dir[0].abs() < 1e-6 {
+                    1e30
+                } else {
+                    1.0 / dir[0]
+                },
+                if dir[1].abs() < 1e-6 {
+                    1e30
+                } else {
+                    1.0 / dir[1]
+                },
+                if dir[2].abs() < 1e-6 {
+                    1e30
+                } else {
+                    1.0 / dir[2]
+                },
+            ];
+
+            let (std_mask, std_t) =
+                node.intersect_ray(origin, inv_dir, 0.0, 1e10, world_min, world_max);
+
+            let scaled_ray =
+                ScaledRay::from_world(origin, inv_dir, 0.0, 1e10, world_min, world_max);
+
+            let (scaled_mask, scaled_t) = node.intersect_scaled_ray(&scaled_ray);
+
+            assert_eq!(
+                scaled_mask, std_mask,
+                "Scaled ray hit mask mismatch at step {step}: scaled {scaled_mask:#b} vs std {std_mask:#b}"
+            );
+
+            for i in 0..4 {
+                if (std_mask & (1 << i)) != 0 {
+                    assert!(
+                        (scaled_t[i] - std_t[i]).abs() < 1e-3,
+                        "Scaled ray distance mismatch at child {i}: scaled {} vs std {}",
+                        scaled_t[i],
+                        std_t[i]
+                    );
+                }
+            }
+
+            // Verify scalar fallback
+            let (scalar_mask, scalar_t) = node.intersect_scaled_ray_scalar(&scaled_ray);
+            assert_eq!(
+                scalar_mask, std_mask,
+                "Scaled scalar hit mask mismatch at step {step}: scalar {scalar_mask:#b} vs std {std_mask:#b}"
+            );
+            for i in 0..4 {
+                if (std_mask & (1 << i)) != 0 {
+                    assert!(
+                        (scalar_t[i] - std_t[i]).abs() < 1e-3,
+                        "Scaled scalar distance mismatch at child {i}: scalar {} vs std {}",
+                        scalar_t[i],
+                        std_t[i]
+                    );
+                }
             }
         }
     }
