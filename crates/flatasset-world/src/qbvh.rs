@@ -499,7 +499,11 @@ mod tests {
                 },
             ];
 
+            #[cfg(target_arch = "x86_64")]
             let (scalar_mask, scalar_t) =
+                node.intersect_ray_scalar(origin, inv_dir, 0.0, 1e10, world_min, world_max);
+            #[cfg(not(target_arch = "x86_64"))]
+            let (_scalar_mask, _scalar_t) =
                 node.intersect_ray_scalar(origin, inv_dir, 0.0, 1e10, world_min, world_max);
 
             #[cfg(target_arch = "x86_64")]
@@ -552,7 +556,11 @@ mod tests {
             let query_min = [-50.0 + offset, -30.0, -10.0];
             let query_max = [50.0 + offset, 30.0, 10.0];
 
+            #[cfg(target_arch = "x86_64")]
             let scalar_mask =
+                node.intersect_aabb_scalar(query_min, query_max, world_min, world_max);
+            #[cfg(not(target_arch = "x86_64"))]
+            let _scalar_mask =
                 node.intersect_aabb_scalar(query_min, query_max, world_min, world_max);
 
             #[cfg(target_arch = "x86_64")]
