@@ -56,10 +56,22 @@ pub fn bench_bundle_vs_bsp(c: &mut Criterion) {
     let flb_bc1_path = "d:/Repo/flatworld-rs/de_inferno_bc1.flb";
     let flb_bc1_zstd_path = "d:/Repo/flatworld-rs/de_inferno_bc1_compressed.flb";
 
-    let bsp_bytes = fs::read(bsp_path).expect("read BSP");
-    let flb_raw_bytes = fs::read(flb_raw_path).expect("read raw FLB");
-    let flb_bc1_bytes = fs::read(flb_bc1_path).expect("read BC1 FLB");
-    let flb_bc1_zstd_bytes = fs::read(flb_bc1_zstd_path).expect("read compressed BC1 FLB");
+    let Ok(bsp_bytes) = fs::read(bsp_path) else {
+        eprintln!("Bench map files not present on disk, skipping bundle_bench.");
+        return;
+    };
+    let Ok(flb_raw_bytes) = fs::read(flb_raw_path) else {
+        eprintln!("Bench raw flb file not present on disk, skipping bundle_bench.");
+        return;
+    };
+    let Ok(flb_bc1_bytes) = fs::read(flb_bc1_path) else {
+        eprintln!("Bench bc1 flb file not present on disk, skipping bundle_bench.");
+        return;
+    };
+    let Ok(flb_bc1_zstd_bytes) = fs::read(flb_bc1_zstd_path) else {
+        eprintln!("Bench compressed flb file not present on disk, skipping bundle_bench.");
+        return;
+    };
 
     println!("\n=============================================================================");
     println!("     CS 1.6 FULL MAP CONTAINER: BSP30 vs FLATBUNDLE (.flb)");
