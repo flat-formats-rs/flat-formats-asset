@@ -5,7 +5,9 @@ use zerocopy::FromBytes;
 use crate::{
     header::{FlatWorldHeader, FlatWorldLumpDesc, LumpType, FLATWORLD_MAGIC, FLATWORLD_VERSION},
     meshlet::FlatWorldMeshlet,
-    pvs::PvsView,
+    pvs::{
+        ChunkedPvsHeader, ChunkedPvsView, PvsView, WordSparsePvsHeader, WordSparsePvsView, WorldPvs,
+    },
     qbvh::QBvh4Node,
 };
 
@@ -164,9 +166,16 @@ impl<'a> FlatWorldView<'a> {
         let lump = self
             .find_lump(lump_type)
             .ok_or(FlatWorldError::LumpNotFound(lump_type))?;
-        let start = lump.file_offset as usize;
-        let end = start + lump.compressed_size as usize;
-        Ok(&self.raw_bytes[start..end])
+        let out_of_bounds = || FlatWorldError::LumpOutOfBounds {
+            lump_id: lump.lump_type,
+            offset: lump.file_offset,
+            size: lump.compressed_size,
+            total: self.raw_bytes.len(),
+        };
+        let start = usize::try_from(lump.file_offset).map_err(|_| out_of_bounds())?;
+        let size = usize::try_from(lump.compressed_size).map_err(|_| out_of_bounds())?;
+        let end = start.checked_add(size).ok_or_else(out_of_bounds)?;
+        self.raw_bytes.get(start..end).ok_or_else(out_of_bounds)
     }
 
     /// Returns decompressed lump payload (zero-copy borrowed if uncompressed, or owned buffer if compressed).
@@ -275,6 +284,61 @@ impl<'a> FlatWorldView<'a> {
         let cluster_count = lump.element_count as usize;
         PvsView::new(cluster_count, bytes).ok_or(FlatWorldError::BufferTooSmall {
             expected: cluster_count * cluster_count.div_ceil(8),
+            actual: bytes.len(),
+        })
+    }
+
+    /// Returns a Chunked PVS viewer (cache-line chunked format).
+    pub fn chunked_pvs_view(&self) -> Result<ChunkedPvsView<'a>, FlatWorldError> {
+        let lump = self
+            .find_lump(LumpType::VisibilityBitmask)
+            .ok_or(FlatWorldError::LumpNotFound(LumpType::VisibilityBitmask))?;
+        if lump.compression_type != 0 {
+            return Err(FlatWorldError::LumpCompressed(
+                LumpType::VisibilityBitmask,
+                lump.compression_type,
+            ));
+        }
+        let bytes = self.lump_bytes(LumpType::VisibilityBitmask)?;
+        ChunkedPvsView::new(bytes).ok_or(FlatWorldError::BufferTooSmall {
+            expected: core::mem::size_of::<ChunkedPvsHeader>(),
+            actual: bytes.len(),
+        })
+    }
+
+    /// Returns a 64-bit Word-Level Sparse PVS viewer.
+    pub fn word_sparse_pvs_view(&self) -> Result<WordSparsePvsView<'a>, FlatWorldError> {
+        let lump = self
+            .find_lump(LumpType::VisibilityBitmask)
+            .ok_or(FlatWorldError::LumpNotFound(LumpType::VisibilityBitmask))?;
+        if lump.compression_type != 0 {
+            return Err(FlatWorldError::LumpCompressed(
+                LumpType::VisibilityBitmask,
+                lump.compression_type,
+            ));
+        }
+        let bytes = self.lump_bytes(LumpType::VisibilityBitmask)?;
+        WordSparsePvsView::new(bytes).ok_or(FlatWorldError::BufferTooSmall {
+            expected: core::mem::size_of::<WordSparsePvsHeader>(),
+            actual: bytes.len(),
+        })
+    }
+
+    /// Returns a unified WorldPvs viewer (auto-detecting Dense or Chunked format).
+    pub fn world_pvs(&self) -> Result<WorldPvs<'a>, FlatWorldError> {
+        let lump = self
+            .find_lump(LumpType::VisibilityBitmask)
+            .ok_or(FlatWorldError::LumpNotFound(LumpType::VisibilityBitmask))?;
+        if lump.compression_type != 0 {
+            return Err(FlatWorldError::LumpCompressed(
+                LumpType::VisibilityBitmask,
+                lump.compression_type,
+            ));
+        }
+        let bytes = self.lump_bytes(LumpType::VisibilityBitmask)?;
+        let cluster_count = lump.element_count as usize;
+        WorldPvs::parse(cluster_count, bytes).ok_or(FlatWorldError::BufferTooSmall {
+            expected: core::mem::size_of::<ChunkedPvsHeader>(),
             actual: bytes.len(),
         })
     }

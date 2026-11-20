@@ -199,6 +199,13 @@ fn test_edge_case_u16_u32_u64_max_overflows() {
     storage.data[32..40].copy_from_slice(&512u64.to_le_bytes());
     storage.data[40..44].copy_from_slice(&4096u32.to_le_bytes());
     storage.data[44..46].copy_from_slice(&u16::MAX.to_le_bytes());
+    // Inconsistent descriptor: pitch * rows > byte_size must be rejected
+    storage.data[46..48].copy_from_slice(&1u16.to_le_bytes());
+    let err = FlatTexView::new(&storage.data).unwrap_err();
+    assert!(matches!(err, FlatTexError::InvalidLayout));
+
+    // An empty subresource with no rows is still valid
+    storage.data[46..48].copy_from_slice(&0u16.to_le_bytes());
     let view = FlatTexView::new(&storage.data).expect("Row pitch u16::MAX must mount safely");
     assert_eq!(view.mips()[0].aligned_row_pitch(), 65535 * 256);
 }

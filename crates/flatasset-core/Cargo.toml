@@ -29,3 +29,7 @@ zstd = ["dep:zstd"]
 
 [dev-dependencies]
 criterion = { workspace = true }
+
+[[bench]]
+name = "bundle_bench"
+harness = false

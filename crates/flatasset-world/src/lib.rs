@@ -22,8 +22,12 @@ pub use header::{
     FLATWORLD_VERSION,
 };
 pub use meshlet::FlatWorldMeshlet;
-pub use pvs::PvsView;
-pub use qbvh::{quantize_aabb, QBvh4Node, QBVH_EMPTY_CHILD, QBVH_LEAF_MASK};
+pub use pvs::{
+    encode_chunked_pvs, encode_word_sparse_pvs, ChunkedPvsHeader, ChunkedPvsRowDesc,
+    ChunkedPvsView, PvsView, WordSparsePvsHeader, WordSparsePvsView, WordSparseRowDesc, WorldPvs,
+    CHUNKED_PVS_MAGIC, PVS_CHUNK_BITS, PVS_CHUNK_BYTES, WORD_SPARSE_PVS_MAGIC,
+};
+pub use qbvh::{quantize_aabb, PreparedRay, QBvh4Node, QBVH_EMPTY_CHILD, QBVH_LEAF_MASK};
 pub use reader::{FlatWorldError, FlatWorldView};
 #[cfg(feature = "builder")]
 pub use writer::FlatWorldBuilder;

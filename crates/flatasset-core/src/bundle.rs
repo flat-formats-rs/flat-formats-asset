@@ -67,6 +67,20 @@ pub enum FlatBundleError {
     IndexOutOfBounds { offset: u32, count: u32 },
     #[error("Item index out of bounds: {0}")]
     ItemOutOfBounds(usize),
+    #[error("Item payload out of bounds: offset {offset} + size {size} > total {limit}")]
+    ItemRangeOutOfBounds {
+        offset: u64,
+        size: u64,
+        limit: usize,
+    },
+}
+
+fn item_range_error(item: &FlatBundleItemDesc, limit: usize) -> FlatBundleError {
+    FlatBundleError::ItemRangeOutOfBounds {
+        offset: item.file_offset,
+        size: item.byte_length,
+        limit,
+    }
 }
 
 /// Zero-copy read-only view over a FlatBundle container.
@@ -105,9 +119,25 @@ impl<'a> FlatBundleView<'a> {
         }
 
         let count = header.item_count as usize;
-        let index_start = header.index_offset as usize;
-        let index_size = count * core::mem::size_of::<FlatBundleItemDesc>();
-        let index_end = index_start + index_size;
+        let index_start = usize::try_from(header.index_offset).map_err(|_| {
+            FlatBundleError::IndexOutOfBounds {
+                offset: header.index_offset,
+                count: header.item_count,
+            }
+        })?;
+        let index_size = count
+            .checked_mul(core::mem::size_of::<FlatBundleItemDesc>())
+            .ok_or(FlatBundleError::IndexOutOfBounds {
+                offset: header.index_offset,
+                count: header.item_count,
+            })?;
+        let index_end =
+            index_start
+                .checked_add(index_size)
+                .ok_or(FlatBundleError::IndexOutOfBounds {
+                    offset: header.index_offset,
+                    count: header.item_count,
+                })?;
 
         if index_end > bytes.len() {
             return Err(FlatBundleError::IndexOutOfBounds {
@@ -124,6 +154,19 @@ impl<'a> FlatBundleView<'a> {
             offset: header.index_offset,
             count: header.item_count,
         })?;
+
+        for item in items.iter() {
+            let start = usize::try_from(item.file_offset)
+                .map_err(|_| item_range_error(item, bytes.len()))?;
+            let size = usize::try_from(item.byte_length)
+                .map_err(|_| item_range_error(item, bytes.len()))?;
+            let end = start
+                .checked_add(size)
+                .ok_or_else(|| item_range_error(item, bytes.len()))?;
+            if end > bytes.len() {
+                return Err(item_range_error(item, bytes.len()));
+            }
+        }
 
         Ok(Self {
             raw_bytes: bytes,
@@ -143,11 +186,21 @@ impl<'a> FlatBundleView<'a> {
     }
 
     /// Accesses the raw byte payload of an asset item by descriptor.
+    ///
+    /// # Errors
+    /// Returns [`FlatBundleError::ItemRangeOutOfBounds`] if the descriptor
+    /// points outside the mounted buffer or overflows `usize`.
     #[inline]
-    pub fn item_bytes(&self, item: &FlatBundleItemDesc) -> &'a [u8] {
-        let start = item.file_offset as usize;
-        let end = start + item.byte_length as usize;
-        &self.raw_bytes[start..end]
+    pub fn item_bytes(&self, item: &FlatBundleItemDesc) -> Result<&'a [u8], FlatBundleError> {
+        let limit = self.raw_bytes.len();
+        let start = usize::try_from(item.file_offset).map_err(|_| item_range_error(item, limit))?;
+        let size = usize::try_from(item.byte_length).map_err(|_| item_range_error(item, limit))?;
+        let end = start
+            .checked_add(size)
+            .ok_or_else(|| item_range_error(item, limit))?;
+        self.raw_bytes
+            .get(start..end)
+            .ok_or_else(|| item_range_error(item, limit))
     }
 
     /// Accesses item bytes by item index.
@@ -159,7 +212,7 @@ impl<'a> FlatBundleView<'a> {
             .items
             .get(index)
             .ok_or(FlatBundleError::ItemOutOfBounds(index))?;
-        Ok((item, self.item_bytes(item)))
+        Ok((item, self.item_bytes(item)?))
     }
 }
 
