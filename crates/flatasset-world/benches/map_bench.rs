@@ -205,11 +205,10 @@ fn qbvh_raycast(
         tested += 1;
         let node = &nodes[stack[sp] as usize];
         let (mask, _) = node.intersect_ray(origin, inv_dir, 0.0, 1e30, world_min, world_max);
-        for slot in 0..4 {
+        for (slot, &child) in node.children.iter().enumerate() {
             if mask & (1 << slot) == 0 {
                 continue;
             }
-            let child = node.children[slot];
             if child == QBVH_EMPTY_CHILD {
                 continue;
             }
