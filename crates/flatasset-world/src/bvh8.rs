@@ -372,7 +372,10 @@ mod tests {
             let scaled_ray =
                 ScaledRay::from_world(origin, inv_dir, 0.0, 1e10, world_min, world_max);
 
+            #[cfg(target_arch = "x86_64")]
             let (scalar_mask, scalar_t) = node.intersect_scaled_ray_scalar(&scaled_ray);
+            #[cfg(not(target_arch = "x86_64"))]
+            let (_scalar_mask, _scalar_t) = node.intersect_scaled_ray_scalar(&scaled_ray);
 
             #[cfg(target_arch = "x86_64")]
             unsafe {
