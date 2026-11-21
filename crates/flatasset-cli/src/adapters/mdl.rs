@@ -1,17 +1,13 @@
-//! GoldSrc StudioMDL v10 parser and geometric converter for FlatMesh.
+//! GoldSrc StudioMDL v10 legacy adapter for FlatMesh.
 //!
 //! Extracts skeletal hierarchy, vertex streams, de-strips triangle meshes,
 //! quantizes normals to A2B10G10R10, converts UV to FP16, and extracts embedded textures.
 
-use alloc::string::String;
-use alloc::vec::Vec;
-use core::mem::size_of;
-
-use crate::builder::FlatMeshBuilder;
-use crate::clusterizer::clusterize_triangles;
-use crate::error::{FlatMeshError, Result};
-use crate::meshlet::FlatDrawIndexedIndirect;
-use crate::vertex::{FlatAttributeVertex, FlatPackedNormal, FlatPositionVertex, FlatSkinVertex};
+use anyhow::{bail, Result};
+use flatasset_mesh::{
+    clusterize_triangles, FlatAttributeVertex, FlatDrawIndexedIndirect, FlatMeshBuilder,
+    FlatPackedNormal, FlatPositionVertex, FlatSkinVertex,
+};
 
 /// Extracted 8-bit paletted texture converted to RGBA8.
 #[derive(Clone, Debug)]
@@ -19,7 +15,7 @@ pub struct MdlTexture {
     pub name: String,
     pub width: u32,
     pub height: u32,
-    pub flags: u32,
+    pub _flags: u32,
     pub rgba_data: Vec<u8>,
 }
 
@@ -33,7 +29,7 @@ pub struct MdlBone {
     pub pos: [f32; 3],
     pub rot: [f32; 3],
 }
-const _: () = assert!(size_of::<MdlBone>() == 64);
+const _: () = assert!(core::mem::size_of::<MdlBone>() == 64);
 
 /// Complete parsed StudioMDL model geometry and assets.
 pub struct MdlModelData {
@@ -66,17 +62,19 @@ impl MdlModelData {
             let bone_bytes: &[u8] = unsafe {
                 core::slice::from_raw_parts(
                     self.bones.as_ptr() as *const u8,
-                    self.bones.len() * size_of::<MdlBone>(),
+                    self.bones.len() * core::mem::size_of::<MdlBone>(),
                 )
             };
             builder = builder.with_skeleton_hierarchy(
                 bone_bytes.to_vec(),
-                size_of::<MdlBone>() as u8,
+                core::mem::size_of::<MdlBone>() as u8,
                 self.bones.len() as u32,
             );
         }
 
-        builder.build()
+        builder
+            .build()
+            .map_err(|e| anyhow::anyhow!("FlatMesh build error: {:?}", e))
     }
 }
 
@@ -88,26 +86,20 @@ pub struct StudioMdlParser<'a> {
 impl<'a> StudioMdlParser<'a> {
     pub fn new(data: &'a [u8]) -> Result<Self> {
         if data.len() < 244 {
-            return Err(FlatMeshError::BufferTooSmall {
-                required: 244,
-                actual: data.len(),
-            });
+            bail!(
+                "Buffer too small for StudioMDL header: {} bytes",
+                data.len()
+            );
         }
 
         let magic = &data[0..4];
         if magic != b"IDST" {
-            return Err(FlatMeshError::InvalidSignature {
-                expected: u64::from_le_bytes([b'I', b'D', b'S', b'T', 0, 0, 0, 0]),
-                actual: u64::from_le_bytes([magic[0], magic[1], magic[2], magic[3], 0, 0, 0, 0]),
-            });
+            bail!("Invalid magic signature: {:?}", magic);
         }
 
         let version = i32::from_le_bytes(data[4..8].try_into().unwrap());
         if version != 10 {
-            return Err(FlatMeshError::UnsupportedVersion {
-                major: version as u8,
-                minor: 0,
-            });
+            bail!("Unsupported StudioMDL version: {}", version);
         }
 
         Ok(Self { data })
@@ -130,11 +122,7 @@ impl<'a> StudioMdlParser<'a> {
         for bp in 0..numbodyparts {
             let bp_base = bodypartindex + bp * 76;
             if bp_base + 76 > self.data.len() {
-                return Err(FlatMeshError::OutOfBounds {
-                    offset: bp_base as u64,
-                    size: 76,
-                    limit: self.data.len(),
-                });
+                bail!("Bodypart {} out of bounds", bp);
             }
 
             let nummodels =
@@ -147,11 +135,7 @@ impl<'a> StudioMdlParser<'a> {
             for m in 0..nummodels {
                 let m_base = modelindex + m * 112;
                 if m_base + 112 > self.data.len() {
-                    return Err(FlatMeshError::OutOfBounds {
-                        offset: m_base as u64,
-                        size: 112,
-                        limit: self.data.len(),
-                    });
+                    bail!("Model {} in bodypart {} out of bounds", m, bp);
                 }
 
                 let nummesh =
@@ -184,11 +168,7 @@ impl<'a> StudioMdlParser<'a> {
                     || vertinfoindex + numverts > self.data.len()
                     || normindex + numnorms * 12 > self.data.len()
                 {
-                    return Err(FlatMeshError::OutOfBounds {
-                        offset: vertindex as u64,
-                        size: (numverts * 12) as u64,
-                        limit: self.data.len(),
-                    });
+                    bail!("Vertex data in model {} exceeds file buffer", m);
                 }
 
                 // Read vertex positions [f32; 3]
@@ -214,11 +194,7 @@ impl<'a> StudioMdlParser<'a> {
                 for mi in 0..nummesh {
                     let mesh_base = meshindex + mi * 20;
                     if mesh_base + 20 > self.data.len() {
-                        return Err(FlatMeshError::OutOfBounds {
-                            offset: mesh_base as u64,
-                            size: 20,
-                            limit: self.data.len(),
-                        });
+                        bail!("Mesh {} in model {} out of bounds", mi, m);
                     }
 
                     let triindex = i32::from_le_bytes(
@@ -257,11 +233,7 @@ impl<'a> StudioMdlParser<'a> {
                         let mut run_indices = Vec::with_capacity(count);
                         for _ in 0..count {
                             if pos + 8 > self.data.len() {
-                                return Err(FlatMeshError::OutOfBounds {
-                                    offset: pos as u64,
-                                    size: 8,
-                                    limit: self.data.len(),
-                                });
+                                bail!("Triangle command run exceeded data buffer");
                             }
 
                             let v_idx =
@@ -364,11 +336,7 @@ impl<'a> StudioMdlParser<'a> {
         let boneindex = i32::from_le_bytes(self.data[144..148].try_into().unwrap()) as usize;
 
         if boneindex + numbones * 112 > self.data.len() {
-            return Err(FlatMeshError::OutOfBounds {
-                offset: boneindex as u64,
-                size: (numbones * 112) as u64,
-                limit: self.data.len(),
-            });
+            bail!("Bone table exceeds file buffer");
         }
 
         let mut bones = Vec::with_capacity(numbones);
@@ -469,7 +437,7 @@ impl<'a> StudioMdlParser<'a> {
                 name,
                 width,
                 height,
-                flags,
+                _flags: flags,
                 rgba_data,
             });
         }

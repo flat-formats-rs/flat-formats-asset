@@ -23,8 +23,6 @@ pub mod vertex;
 pub mod builder;
 #[cfg(feature = "std")]
 pub mod clusterizer;
-#[cfg(feature = "std")]
-pub mod mdl;
 
 pub use error::{FlatMeshError, Result};
 pub use header::{FlatMeshHeader, FormatSignature};
@@ -37,5 +35,3 @@ pub use vertex::{FlatAttributeVertex, FlatPackedNormal, FlatPositionVertex, Flat
 pub use builder::FlatMeshBuilder;
 #[cfg(feature = "std")]
 pub use clusterizer::clusterize_triangles;
-#[cfg(feature = "std")]
-pub use mdl::{MdlBone, MdlModelData, MdlTexture, StudioMdlParser};
