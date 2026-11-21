@@ -1,6 +1,7 @@
-//! Legacy GoldSrc format adapters for the `fla` CLI converter tool.
+//! Legacy format adapters for the `fla` CLI converter tool.
 //!
-//! Separates legacy binary parsing (StudioMDL, BSP, WAD, etc.) from the core
-//! zero-allocation engine container libraries (`flatasset-mesh`, `flatasset-texture`, etc.).
+//! Separates legacy binary parsing (StudioMDL, RIFF WAV, etc.) from the core
+//! zero-allocation engine container libraries (`flatasset-mesh`, `flatasset-audio`, etc.).
 
 pub mod mdl;
+pub mod wav;
