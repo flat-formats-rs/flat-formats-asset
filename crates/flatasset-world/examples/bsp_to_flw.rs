@@ -8,10 +8,12 @@ use std::{env, fs};
 
 use flatasset_world::header::LumpType;
 use flatasset_world::lightmap::{FaceLightmapInput, LightmapPacker};
+use flatasset_world::meshlet::{MeshletClusterizer, RawMeshletVertex};
 use flatasset_world::qbvh::{QBvh4Node, QBVH_LEAF_MASK};
 use flatasset_world::FlatWorldBuilder;
 use zerocopy::IntoBytes;
 
+const LUMP_PLANES: usize = 1;
 const LUMP_VERTICES: usize = 3;
 const LUMP_VISIBILITY: usize = 4;
 const LUMP_NODES: usize = 5;
@@ -199,26 +201,47 @@ fn main() {
     let (light_off, light_len) = lump(&b, LUMP_LIGHTING);
     let mut lightmap_payload = Vec::new();
     let mut lightmap_face_count = 0;
-    if light_len > 0 {
+    let meshlet_payload;
+    let mut total_meshlets_count = 0;
+
+    {
+        let (plane_off, _) = lump(&b, LUMP_PLANES);
         let (face_off, face_len) = lump(&b, LUMP_FACES);
         let (texinfo_off, _) = lump(&b, LUMP_TEXINFO);
         let (vert_off, _) = lump(&b, LUMP_VERTICES);
         let (edge_off, _) = lump(&b, LUMP_EDGES);
         let (surfedge_off, _) = lump(&b, LUMP_SURFEDGES);
         let face_count = face_len / 20;
-        let lighting = &b[light_off..light_off + light_len];
+        let lighting = if light_len > 0 {
+            &b[light_off..light_off + light_len]
+        } else {
+            &[]
+        };
+
         let mut inputs = Vec::new();
+        let mut clusterizer = MeshletClusterizer::new();
 
         for face_idx in 0..face_count {
             let base = face_off + face_idx * 20;
-            let lightofs = i32_at(&b, base + 16);
-            if lightofs < 0 || (lightofs as usize) >= light_len {
-                continue;
-            }
-
+            let planenum = u16_at(&b, base) as usize;
+            let side = u16_at(&b, base + 2);
             let firstedge = u32_at(&b, base + 4) as usize;
             let numedges = u16_at(&b, base + 8) as usize;
             let texinfo_id = u16_at(&b, base + 10) as usize;
+            let lightofs = i32_at(&b, base + 16);
+
+            // Extract plane normal
+            let pl_base = plane_off + planenum * 20;
+            let mut normal = [
+                f32_at(&b, pl_base),
+                f32_at(&b, pl_base + 4),
+                f32_at(&b, pl_base + 8),
+            ];
+            if side != 0 {
+                normal[0] = -normal[0];
+                normal[1] = -normal[1];
+                normal[2] = -normal[2];
+            }
 
             let ti_base = texinfo_off + texinfo_id * 40;
             let s_vec = [
@@ -239,6 +262,8 @@ fn main() {
             let mut t_min = f32::MAX;
             let mut t_max = f32::MIN;
 
+            let mut face_verts = Vec::with_capacity(numedges);
+
             for e in 0..numedges {
                 let se = i32_at(&b, surfedge_off + (firstedge + e) * 4);
                 let vert_idx = if se >= 0 {
@@ -258,28 +283,59 @@ fn main() {
                 s_max = s_max.max(s);
                 t_min = t_min.min(t);
                 t_max = t_max.max(t);
-            }
 
-            let b_s_min = (s_min / 16.0).floor();
-            let b_s_max = (s_max / 16.0).ceil();
-            let b_t_min = (t_min / 16.0).floor();
-            let b_t_max = (t_max / 16.0).ceil();
-
-            let w = ((b_s_max - b_s_min) as i32 + 1).max(1) as u16;
-            let h = ((b_t_max - b_t_min) as i32 + 1).max(1) as u16;
-
-            let start = lightofs as usize;
-            let req_len = (w as usize) * (h as usize) * 3;
-            if start + req_len <= lighting.len() {
-                inputs.push(FaceLightmapInput {
-                    face_idx,
-                    s_min: b_s_min * 16.0,
-                    t_min: b_t_min * 16.0,
-                    width: w,
-                    height: h,
-                    rgb_luxels: &lighting[start..start + req_len],
+                face_verts.push(RawMeshletVertex {
+                    position: [px, py, pz],
+                    uv: [s / 128.0, t / 128.0],
+                    normal,
                 });
             }
+
+            // Triangulate face fan into meshlet clusterizer
+            if face_verts.len() >= 3 {
+                for i in 1..face_verts.len() - 1 {
+                    clusterizer.add_triangle(
+                        texinfo_id as u16,
+                        [face_verts[0], face_verts[i], face_verts[i + 1]],
+                    );
+                }
+            }
+
+            // Lightmap extraction
+            if light_len > 0 && lightofs >= 0 && (lightofs as usize) < light_len {
+                let b_s_min = (s_min / 16.0).floor();
+                let b_s_max = (s_max / 16.0).ceil();
+                let b_t_min = (t_min / 16.0).floor();
+                let b_t_max = (t_max / 16.0).ceil();
+
+                let w = ((b_s_max - b_s_min) as i32 + 1).max(1) as u16;
+                let h = ((b_t_max - b_t_min) as i32 + 1).max(1) as u16;
+
+                let start = lightofs as usize;
+                let req_len = (w as usize) * (h as usize) * 3;
+                if start + req_len <= lighting.len() {
+                    inputs.push(FaceLightmapInput {
+                        face_idx,
+                        s_min: b_s_min * 16.0,
+                        t_min: b_t_min * 16.0,
+                        width: w,
+                        height: h,
+                        rgb_luxels: &lighting[start..start + req_len],
+                    });
+                }
+            }
+        }
+
+        meshlet_payload = clusterizer.build();
+        if let Some(m_view) = flatasset_world::meshlet::MeshletLumpView::new(&meshlet_payload) {
+            total_meshlets_count = m_view.meshlets().len();
+            eprintln!(
+                "Meshlets: {} clusters ({} quantized vertices, {} triangles) -> {} KB",
+                total_meshlets_count,
+                m_view.vertices().len(),
+                m_view.triangles().len(),
+                meshlet_payload.len() / 1024
+            );
         }
 
         if !inputs.is_empty() {
@@ -307,6 +363,15 @@ fn main() {
             1,
             word_sparse_pvs,
         );
+
+    if !meshlet_payload.is_empty() {
+        builder = builder.add_lump(
+            LumpType::Meshlets,
+            total_meshlets_count as u64,
+            32,
+            meshlet_payload,
+        );
+    }
 
     if !lightmap_payload.is_empty() {
         builder = builder.add_lump(

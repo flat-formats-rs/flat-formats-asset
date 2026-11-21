@@ -29,7 +29,12 @@ pub use lightmap::{
     LightmapError, LightmapFormat, LightmapPacker, DEFAULT_ATLAS_WIDTH, DEFAULT_LIGHTGAMMA,
     DEFAULT_LIGHTSCALE, GPU_ROW_PITCH_ALIGNMENT, LIGHTMAP_MAGIC, LIGHTMAP_VERSION,
 };
-pub use meshlet::FlatWorldMeshlet;
+pub use meshlet::{
+    compute_bounding_sphere, dequantize_cluster_position, f32_to_f16, quantize_cluster_position,
+    FlatWorldMeshlet, MeshletClusterizer, MeshletLumpHeader, MeshletLumpView, MicroTriangle,
+    QuantizedMeshletVertex, RawMeshletVertex, MAX_MESHLET_TRIANGLES, MAX_MESHLET_VERTICES,
+    MESHLET_MAGIC, MESHLET_VERSION,
+};
 pub use pvs::{
     encode_chunked_pvs, encode_two_tier_pvs, encode_word_sparse_pvs, ChunkedPvsHeader,
     ChunkedPvsRowDesc, ChunkedPvsView, ClusterRange, PvsView, TwoTierPvsHeader, TwoTierPvsView,

@@ -344,6 +344,24 @@ fn bench_real_map(c: &mut Criterion) {
         }
     }
 
+    if let Ok(flw_full_bytes) = fs::read("D:/Repo/flatworld-rs/de_inferno_full_world.flw") {
+        if let Ok(flw_full_view) = FlatWorldView::new(&flw_full_bytes) {
+            c.bench_function("inferno_flw_meshlet_view_mount", |b| {
+                b.iter(|| black_box(flw_full_view.meshlet_lump_view().unwrap().unwrap()));
+            });
+            if let Ok(Some(m_view)) = flw_full_view.meshlet_lump_view() {
+                c.bench_function("inferno_flw_meshlet_first_cluster_fetch", |b| {
+                    b.iter(|| {
+                        let m = &m_view.meshlets()[0];
+                        let verts = m_view.meshlet_vertices(m).unwrap();
+                        let tris = m_view.meshlet_triangles(m).unwrap();
+                        black_box((verts.len(), tris.len()))
+                    });
+                });
+            }
+        }
+    }
+
     c.bench_function("inferno_bsp_mount_table_only", |b| {
         b.iter(|| black_box(bsp_mount_table_only(black_box(&bsp_bytes))));
     });

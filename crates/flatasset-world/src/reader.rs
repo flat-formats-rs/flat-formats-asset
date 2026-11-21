@@ -5,7 +5,7 @@ use zerocopy::FromBytes;
 use crate::{
     header::{FlatWorldHeader, FlatWorldLumpDesc, LumpType, FLATWORLD_MAGIC, FLATWORLD_VERSION},
     lightmap::LightmapAtlasView,
-    meshlet::FlatWorldMeshlet,
+    meshlet::{FlatWorldMeshlet, MeshletLumpView},
     pvs::{
         ChunkedPvsHeader, ChunkedPvsView, PvsView, WordSparsePvsHeader, WordSparsePvsView, WorldPvs,
     },
@@ -44,6 +44,8 @@ pub enum FlatWorldError {
     UnsupportedCompression(u32),
     #[error("Invalid UTF-8 payload in entity lump")]
     InvalidUtf8,
+    #[error("Invalid meshlet lump")]
+    InvalidMeshlet,
     #[error("Invalid lightmap lump: {0}")]
     InvalidLightmap(#[from] crate::lightmap::LightmapError),
 }
@@ -374,6 +376,22 @@ impl<'a> FlatWorldView<'a> {
         }
         let bytes = self.lump_bytes(LumpType::Lightmaps)?;
         let view = LightmapAtlasView::new(bytes)?;
+        Ok(Some(view))
+    }
+
+    /// Returns the zero-copy Meshlet Cluster viewer (Lump 0), if present.
+    pub fn meshlet_lump_view(&self) -> Result<Option<MeshletLumpView<'a>>, FlatWorldError> {
+        let Some(lump) = self.find_lump(LumpType::Meshlets) else {
+            return Ok(None);
+        };
+        if lump.compression_type != 0 {
+            return Err(FlatWorldError::LumpCompressed(
+                LumpType::Meshlets,
+                lump.compression_type,
+            ));
+        }
+        let bytes = self.lump_bytes(LumpType::Meshlets)?;
+        let view = MeshletLumpView::new(bytes).ok_or(FlatWorldError::InvalidMeshlet)?;
         Ok(Some(view))
     }
 }
