@@ -471,7 +471,7 @@ dependencies = [
  "flatasset-audio",
  "flatasset-core",
  "flatasset-mesh",
- "flatasset-tex",
+ "flatasset-texture",
  "flatasset-world",
  "flatdemo-core",
  "image",
@@ -486,7 +486,7 @@ dependencies = [
  "criterion",
  "flatasset-audio",
  "flatasset-mesh",
- "flatasset-tex",
+ "flatasset-texture",
  "flatasset-world",
  "flatdemo-core",
  "narrow-ptr",
@@ -516,7 +516,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "flatasset-tex"
+name = "flatasset-texture"
 version = "0.2.1"
 dependencies = [
  "arc-swap",
@@ -539,7 +539,7 @@ dependencies = [
  "blake3",
  "criterion",
  "flatasset-mesh",
- "flatasset-tex",
+ "flatasset-texture",
  "narrow-ptr",
  "odd-int",
  "silicon-kit",

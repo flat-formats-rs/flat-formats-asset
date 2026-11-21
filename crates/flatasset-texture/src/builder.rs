@@ -1,11 +1,11 @@
-//! Direct-DMA FlatTex Container Builder.
+//! Direct-DMA FlatTexture Container Builder.
 //!
 //! Synthesizes zero-copy `.flt` texture files from raw or block-compressed image streams
 //! with strict 256-byte row-pitch alignment and 512-byte subresource alignment.
 
-use crate::error::{FlatTexError, Result};
+use crate::error::{FlatTextureError, Result};
 use crate::format::VkFormat;
-use crate::header::{FlatTexHeader, FormatSignature};
+use crate::header::{FlatTextureHeader, FormatSignature};
 use crate::mip::FlatMipDesc;
 use crate::streaming::CONTAINER_PAYLOAD_OFFSET_4KB;
 use alloc::vec::Vec;
@@ -21,8 +21,8 @@ pub struct MipInput {
     pub rows_per_image: u16,
 }
 
-/// Builder for constructing valid Direct-DMA FlatTex binary packages.
-pub struct FlatTexBuilder {
+/// Builder for constructing valid Direct-DMA FlatTexture binary packages.
+pub struct FlatTextureBuilder {
     width: u16,
     height: u16,
     depth_or_layers: u16,
@@ -31,7 +31,7 @@ pub struct FlatTexBuilder {
     mips: Vec<MipInput>,
 }
 
-impl FlatTexBuilder {
+impl FlatTextureBuilder {
     /// Creates a new builder for a 2D texture.
     pub fn new_2d(width: u16, height: u16, vk_format: VkFormat) -> Self {
         Self {
@@ -59,9 +59,9 @@ impl FlatTexBuilder {
     /// Sets the sRGB color space flag.
     pub fn with_srgb(mut self, srgb: bool) -> Self {
         if srgb {
-            self.flags |= FlatTexHeader::FLAG_SRGB;
+            self.flags |= FlatTextureHeader::FLAG_SRGB;
         } else {
-            self.flags &= !FlatTexHeader::FLAG_SRGB;
+            self.flags &= !FlatTextureHeader::FLAG_SRGB;
         }
         self
     }
@@ -74,7 +74,7 @@ impl FlatTexBuilder {
     /// Serializes the complete `.flt` container.
     pub fn build(self) -> Result<Vec<u8>> {
         if self.mips.is_empty() {
-            return Err(FlatTexError::InvalidLayout);
+            return Err(FlatTextureError::InvalidLayout);
         }
 
         let mip_levels = self.mips.len() as u8;
@@ -82,7 +82,7 @@ impl FlatTexBuilder {
         let mip_table_size = (mip_levels as usize) * core::mem::size_of::<FlatMipDesc>();
 
         if mip_table_offset + mip_table_size > CONTAINER_PAYLOAD_OFFSET_4KB {
-            return Err(FlatTexError::InvalidLayout);
+            return Err(FlatTextureError::InvalidLayout);
         }
 
         let mut payload_data = Vec::new();
@@ -112,8 +112,8 @@ impl FlatTexBuilder {
         let total_size = CONTAINER_PAYLOAD_OFFSET_4KB + payload_data.len();
         let mut container = alloc::vec![0u8; total_size];
 
-        let header = FlatTexHeader {
-            signature: FormatSignature::FLATTEX_V1_0,
+        let header = FlatTextureHeader {
+            signature: FormatSignature::FLATTEXTURE_V1_0,
             total_payload_kb: (payload_data.len() / 1024) as u32,
             vk_format: self.vk_format as u16,
             width: self.width,

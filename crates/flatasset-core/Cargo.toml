@@ -10,7 +10,7 @@ homepage.workspace = true
 
 [dependencies]
 flatasset-mesh = { workspace = true }
-flatasset-tex = { workspace = true }
+flatasset-texture = { workspace = true }
 flatasset-world = { workspace = true }
 flatasset-audio = { workspace = true }
 flatdemo-core = { workspace = true }

@@ -57,7 +57,7 @@ enum Commands {
         /// Path to the shared pool .flb file
         pool: PathBuf,
     },
-    /// Converts textures from a GoldSrc WAD3 archive into FlatTex (.flt) Direct-DMA packages
+    /// Converts textures from a GoldSrc WAD3 archive into FlatTexture (.flt) Direct-DMA packages
     ConvertWad {
         /// Path to the .wad file
         wad: PathBuf,
@@ -65,7 +65,7 @@ enum Commands {
         #[arg(short, long)]
         out_dir: PathBuf,
     },
-    /// Converts a 6-face skybox (TGA/BMP files: *bk, *dn, *ft, *lf, *rt, *up) into a FlatTex Cubemap
+    /// Converts a 6-face skybox (TGA/BMP files: *bk, *dn, *ft, *lf, *rt, *up) into a FlatTexture Cubemap
     ConvertSkybox {
         /// Path prefix to the 6 skybox faces (e.g. `cstrike/gfx/env/desert`)
         prefix: PathBuf,
@@ -156,13 +156,13 @@ fn main() -> Result<()> {
 
             for (i, item) in view.items().iter().enumerate() {
                 let kind = match item.asset_kind {
-                    0x4D544C46 => "FlatMesh ",
-                    0x54544C46 => "FlatTex  ",
-                    0x00574C46 => "FlatWorld",
-                    0x00444C46 => "FlatDemo ",
-                    0x42544C46 => "FlatBundle",
-                    0x53544C46 => "FlatAudio ",
-                    _ => "Unknown   ",
+                    0x4D544C46 => "FlatMesh   ",
+                    0x54544C46 => "FlatTexture",
+                    0x00574C46 => "FlatWorld  ",
+                    0x00444C46 => "FlatDemo   ",
+                    0x42544C46 => "FlatBundle ",
+                    0x53544C46 => "FlatAudio  ",
+                    _ => "Unknown    ",
                 };
                 println!(
                     "{:<6} {:<10} 0x{:<10X} {:<12} {:<12} {}",
@@ -378,11 +378,13 @@ fn main() -> Result<()> {
 
             for (i, item) in view.items().iter().enumerate() {
                 let kind = match item.asset_kind {
-                    0x4D544C46 => "FlatMesh ",
-                    0x54544C46 => "FlatTex  ",
-                    0x00574C46 => "FlatWorld",
-                    0x00444C46 => "FlatDemo ",
-                    _ => "Unknown  ",
+                    0x4D544C46 => "FlatMesh   ",
+                    0x54544C46 => "FlatTexture",
+                    0x00574C46 => "FlatWorld  ",
+                    0x00444C46 => "FlatDemo   ",
+                    0x42544C46 => "FlatBundle ",
+                    0x53544C46 => "FlatAudio  ",
+                    _ => "Unknown    ",
                 };
                 println!(
                     "{:<6} 0x{:<20X} {:<12} {:<12} {:<12}",
@@ -466,13 +468,13 @@ fn main() -> Result<()> {
 
                     // Encode to Direct-DMA BC1
                     let (dma_bytes, aligned_pitch, rows) =
-                        flatasset_tex::encode_rgba_to_bc1_dma(width, height, &rgba);
-                    let mut builder = flatasset_tex::FlatTexBuilder::new_2d(
+                        flatasset_texture::encode_rgba_to_bc1_dma(width, height, &rgba);
+                    let mut builder = flatasset_texture::FlatTextureBuilder::new_2d(
                         width as u16,
                         height as u16,
-                        flatasset_tex::VkFormat::Bc1RgbUnormBlock,
+                        flatasset_texture::VkFormat::Bc1RgbUnormBlock,
                     );
-                    builder.add_mip(flatasset_tex::MipInput {
+                    builder.add_mip(flatasset_texture::MipInput {
                         width,
                         height,
                         dma_bytes,
@@ -489,7 +491,7 @@ fn main() -> Result<()> {
                 }
             }
             println!(
-                "Converted {} MIP textures to Direct-DMA FlatTex (.flt)!",
+                "Converted {} MIP textures to Direct-DMA FlatTexture (.flt)!",
                 converted
             );
         }
@@ -532,16 +534,16 @@ fn main() -> Result<()> {
                 face_images.push(img.into_raw());
             }
 
-            let mut builder = flatasset_tex::FlatTexBuilder::new_cubemap(
+            let mut builder = flatasset_texture::FlatTextureBuilder::new_cubemap(
                 cubemap_w as u16,
                 cubemap_h as u16,
-                flatasset_tex::VkFormat::Bc1RgbUnormBlock,
+                flatasset_texture::VkFormat::Bc1RgbUnormBlock,
             );
 
             for (face_idx, rgba) in face_images.iter().enumerate() {
                 let (dma_bytes, aligned_pitch, rows) =
-                    flatasset_tex::encode_rgba_to_bc1_dma(cubemap_w, cubemap_h, rgba);
-                builder.add_mip(flatasset_tex::MipInput {
+                    flatasset_texture::encode_rgba_to_bc1_dma(cubemap_w, cubemap_h, rgba);
+                builder.add_mip(flatasset_texture::MipInput {
                     width: cubemap_w,
                     height: cubemap_h,
                     dma_bytes,
@@ -560,7 +562,7 @@ fn main() -> Result<()> {
             }
             std::fs::write(&output, &flt_bytes)?;
             println!(
-                "Successfully generated Cubemap FlatTex {:?} ({} KB, 6 faces)!",
+                "Successfully generated Cubemap FlatTexture {:?} ({} KB, 6 faces)!",
                 output,
                 flt_bytes.len() / 1024
             );

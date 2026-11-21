@@ -2,7 +2,7 @@
 members = [
     "crates/flatasset-core",
     "crates/flatasset-mesh",
-    "crates/flatasset-tex",
+    "crates/flatasset-texture",
     "crates/flatasset-world",
     "crates/flatasset-audio",
     "crates/flatasset-cli",
@@ -21,7 +21,7 @@ homepage = "https://github.com/flat-formats-rs/flat-formats-asset"
 [workspace.dependencies]
 flatasset-core = { path = "crates/flatasset-core", version = "0.2.1" }
 flatasset-mesh = { path = "crates/flatasset-mesh", version = "0.2.1" }
-flatasset-tex = { path = "crates/flatasset-tex", version = "0.2.1" }
+flatasset-texture = { path = "crates/flatasset-texture", version = "0.2.1" }
 flatasset-world = { path = "crates/flatasset-world", version = "0.2.1" }
 flatasset-audio = { path = "crates/flatasset-audio", version = "0.2.1" }
 flatdemo-core = { git = "https://github.com/flat-formats-rs/flat-formats-demo.git", branch = "dev", version = "0.1.0" }

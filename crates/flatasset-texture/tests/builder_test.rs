@@ -1,4 +1,6 @@
-use flatasset_tex::{encode_rgba_to_bc1_dma, FlatTexBuilder, FlatTexView, MipInput, VkFormat};
+use flatasset_texture::{
+    encode_rgba_to_bc1_dma, FlatTextureBuilder, FlatTextureView, MipInput, VkFormat,
+};
 
 #[test]
 fn test_bc1_encoding_and_flattex_builder_roundtrip() {
@@ -21,7 +23,7 @@ fn test_bc1_encoding_and_flattex_builder_roundtrip() {
     assert_eq!(aligned_pitch % 256, 0);
 
     let mut builder =
-        FlatTexBuilder::new_2d(width as u16, height as u16, VkFormat::Bc1RgbUnormBlock);
+        FlatTextureBuilder::new_2d(width as u16, height as u16, VkFormat::Bc1RgbUnormBlock);
     builder.add_mip(MipInput {
         width,
         height,
@@ -32,7 +34,7 @@ fn test_bc1_encoding_and_flattex_builder_roundtrip() {
 
     let container_bytes = builder.build().expect("build flattex");
 
-    // Standard FlatTex containers require 32-byte alignment when mounted from memory
+    // Standard FlatTexture containers require 32-byte alignment when mounted from memory
     // (e.g. from mmap or aligned buffer). Wrap in 64-byte aligned storage for test.
     let mut aligned_vec = Vec::with_capacity(container_bytes.len() + 64);
     let offset = (64 - (aligned_vec.as_ptr() as usize % 64)) % 64;
@@ -41,7 +43,7 @@ fn test_bc1_encoding_and_flattex_builder_roundtrip() {
     let aligned_slice = &aligned_vec[offset..offset + container_bytes.len()];
     assert_eq!(aligned_slice.as_ptr() as usize % 32, 0);
 
-    let view = FlatTexView::new(aligned_slice).expect("mount flattex view");
+    let view = FlatTextureView::new(aligned_slice).expect("mount flattex view");
 
     assert_eq!(view.header().width, 64);
     assert_eq!(view.header().height, 64);

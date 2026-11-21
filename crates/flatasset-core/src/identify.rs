@@ -6,7 +6,7 @@
 pub enum FlatAssetKind {
     /// `.flm`: FlatMesh (Magic: `b"FLTM"`, `0x4D544C46`)
     Mesh = 0x4D544C46,
-    /// `.flt`: FlatTex (Magic: `b"FLTT"`, `0x54544C46`)
+    /// `.flt`: FlatTexture (Magic: `b"FLTT"`, `0x54544C46`)
     Texture = 0x54544C46,
     /// `.flw`: FlatWorld (Magic: `b"FLW\0"`, `0x00574C46`)
     World = 0x00574C46,
@@ -38,7 +38,7 @@ impl FlatAssetKind {
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::Mesh => "FlatMesh (Skeletal Mesh/Animation)",
-            Self::Texture => "FlatTex (Direct-DMA GPU Texture)",
+            Self::Texture => "FlatTexture (Direct-DMA GPU Texture)",
             Self::World => "FlatWorld (Map/Geometry/BVH/PVS)",
             Self::Demo => "FlatDemo (Columnar Replay Stream)",
             Self::Bundle => "FlatBundle (Multi-Asset Container)",

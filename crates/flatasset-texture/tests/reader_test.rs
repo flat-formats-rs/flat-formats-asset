@@ -1,4 +1,6 @@
-use flatasset_tex::{FlatMipDesc, FlatTexHeader, FlatTexView, FormatSignature, VkFormat};
+use flatasset_texture::{
+    FlatMipDesc, FlatTextureHeader, FlatTextureView, FormatSignature, VkFormat,
+};
 use zerocopy::IntoBytes;
 
 #[repr(C, align(64))]
@@ -8,7 +10,7 @@ struct AlignedStorage<const N: usize> {
 
 #[test]
 fn test_zero_alloc_flattex_view_valid() {
-    let header_size = core::mem::size_of::<FlatTexHeader>();
+    let header_size = core::mem::size_of::<FlatTextureHeader>();
     let mip_table_offset = 32;
     let mip_count = 2;
     let mip_table_size = mip_count * core::mem::size_of::<FlatMipDesc>();
@@ -34,8 +36,8 @@ fn test_zero_alloc_flattex_view_valid() {
 
     assert_eq!(buffer.as_ptr() as usize % 32, 0);
 
-    let header = FlatTexHeader {
-        signature: FormatSignature::FLATTEX_V1_0,
+    let header = FlatTextureHeader {
+        signature: FormatSignature::FLATTEXTURE_V1_0,
         total_payload_kb: 8,
         vk_format: VkFormat::Bc1RgbSrgbBlock as u16,
         width: 64,
@@ -44,7 +46,7 @@ fn test_zero_alloc_flattex_view_valid() {
         mip_table_offset_div32: 1, // 32 bytes
         payload_offset_div256: 2,  // 512 bytes
         mip_levels: mip_count as u8,
-        flags: FlatTexHeader::FLAG_SRGB,
+        flags: FlatTextureHeader::FLAG_SRGB,
         _reserved: [0; 6],
     };
     buffer[..header_size].copy_from_slice(header.as_bytes());
@@ -67,9 +69,9 @@ fn test_zero_alloc_flattex_view_valid() {
     let mip_dest = &mut buffer[mip_table_offset..mip_table_offset + mip_table_size];
     mip_dest.copy_from_slice(mips.as_bytes());
 
-    // Mount FlatTexView - Zero heap allocations!
-    let view = FlatTexView::new(buffer).expect("Valid container must mount without error");
-    assert_eq!(view.header().signature, FormatSignature::FLATTEX_V1_0);
+    // Mount FlatTextureView - Zero heap allocations!
+    let view = FlatTextureView::new(buffer).expect("Valid container must mount without error");
+    assert_eq!(view.header().signature, FormatSignature::FLATTEXTURE_V1_0);
     assert_eq!(view.header().width, 64);
     assert_eq!(view.header().height, 64);
     assert_eq!(view.header().mip_levels, 2);

@@ -1,9 +1,9 @@
-//! Error types for FlatTex decoding and validation.
+//! Error types for FlatTexture decoding and validation.
 
 use core::fmt;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum FlatTexError {
+pub enum FlatTextureError {
     /// Buffer is smaller than the required header size.
     BufferTooSmall { required: usize, actual: usize },
     /// Magic signature mismatch or unsupported major version.
@@ -26,7 +26,7 @@ pub enum FlatTexError {
     InvalidLayout,
 }
 
-impl fmt::Display for FlatTexError {
+impl fmt::Display for FlatTextureError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BufferTooSmall { required, actual } => {
@@ -80,6 +80,6 @@ impl fmt::Display for FlatTexError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for FlatTexError {}
+impl std::error::Error for FlatTextureError {}
 
-pub type Result<T> = core::result::Result<T, FlatTexError>;
+pub type Result<T> = core::result::Result<T, FlatTextureError>;
