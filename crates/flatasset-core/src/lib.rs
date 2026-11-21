@@ -9,16 +9,21 @@
 
 #![no_std]
 
+extern crate alloc;
+
 #[cfg(feature = "std")]
 extern crate std;
 
 pub mod bundle;
+pub mod cas;
 pub mod identify;
 pub mod script;
 
 pub use bundle::{
     FlatBundleBuilder, FlatBundleError, FlatBundleHeader, FlatBundleItemDesc, FlatBundleView,
+    COMPRESSION_ALGO_MASK, COMPRESSION_RAW, COMPRESSION_ZSTD, FLAG_CAS_REFERENCE,
 };
+pub use cas::FlatCasPool;
 pub use identify::{identify_flat_asset, FlatAssetKind};
 pub use script::{ScriptEngineId, ScriptExecutionFlags, ScriptLumpDesc};
 

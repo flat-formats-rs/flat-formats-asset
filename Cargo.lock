@@ -457,6 +457,7 @@ name = "flatasset-cli"
 version = "0.2.1"
 dependencies = [
  "anyhow",
+ "blake3",
  "clap",
  "flatasset-core",
  "flatasset-mesh",

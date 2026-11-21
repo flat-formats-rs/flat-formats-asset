@@ -11,6 +11,22 @@ pub const FLATBUNDLE_MAGIC: u32 = 0x42544C46;
 /// Current format version
 pub const FLATBUNDLE_VERSION: u32 = 1;
 
+/// Compression / payload flags in [`FlatBundleItemDesc::compression`].
+///
+/// Uncompressed raw memory-mappable payload (direct DMA).
+pub const COMPRESSION_RAW: u32 = 0;
+/// In-container Zstd stream compression.
+pub const COMPRESSION_ZSTD: u32 = 1;
+/// High bit flag indicating this item is an external Content-Addressable Storage (CAS) reference.
+///
+/// When this bit is set:
+/// - The asset payload is NOT stored inline in this container (`byte_length == 0` or points to pool offset).
+/// - `name_hash` stores the 64-bit truncated BLAKE3 checksum of the uncompressed asset content.
+/// - The runtime resolves the payload from the global `FlatCasPool` using `name_hash` or BLAKE3 identifier.
+pub const FLAG_CAS_REFERENCE: u32 = 0x8000_0000;
+/// Bitmask for the underlying compression algorithm (bits 0..30).
+pub const COMPRESSION_ALGO_MASK: u32 = 0x7FFF_FFFF;
+
 /// Exact 64-byte container header for FlatBundle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, FromBytes, IntoBytes, KnownLayout, Immutable)]
 #[repr(C)]
@@ -51,6 +67,20 @@ pub struct FlatBundleItemDesc {
     pub uncompressed_size: u64,
     /// Reserved zero padding
     pub _pad: [u8; 24],
+}
+
+impl FlatBundleItemDesc {
+    /// Returns `true` if this item descriptor represents a reference to a shared CAS pool.
+    #[inline(always)]
+    pub fn is_cas_reference(&self) -> bool {
+        (self.compression & FLAG_CAS_REFERENCE) != 0
+    }
+
+    /// Returns the underlying compression algorithm without CAS flags.
+    #[inline(always)]
+    pub fn compression_algo(&self) -> u32 {
+        self.compression & COMPRESSION_ALGO_MASK
+    }
 }
 
 const _: () = assert!(core::mem::size_of::<FlatBundleItemDesc>() == 64);
@@ -156,6 +186,10 @@ impl<'a> FlatBundleView<'a> {
         })?;
 
         for item in items.iter() {
+            if item.is_cas_reference() && item.byte_length == 0 {
+                // External reference with no inline payload: offset validation skipped
+                continue;
+            }
             let start = usize::try_from(item.file_offset)
                 .map_err(|_| item_range_error(item, bytes.len()))?;
             let size = usize::try_from(item.byte_length)
@@ -192,6 +226,10 @@ impl<'a> FlatBundleView<'a> {
     /// points outside the mounted buffer or overflows `usize`.
     #[inline]
     pub fn item_bytes(&self, item: &FlatBundleItemDesc) -> Result<&'a [u8], FlatBundleError> {
+        if item.is_cas_reference() && item.byte_length == 0 {
+            // Cannot extract inline bytes for an external CAS reference without pool
+            return Ok(&[]);
+        }
         let limit = self.raw_bytes.len();
         let start = usize::try_from(item.file_offset).map_err(|_| item_range_error(item, limit))?;
         let size = usize::try_from(item.byte_length).map_err(|_| item_range_error(item, limit))?;
@@ -270,6 +308,29 @@ impl FlatBundleBuilder {
         };
 
         self.payload_data.extend_from_slice(&data_to_write);
+        self.items.push(desc);
+    }
+
+    /// Adds an external Content-Addressable Storage (CAS) reference descriptor.
+    ///
+    /// Stores only the 64-byte descriptor without inline payload data (`byte_length == 0`).
+    /// The runtime will resolve the asset by `blake3_hash` (truncated to `u64` in `name_hash`)
+    /// from the active [`FlatCasPool`].
+    pub fn add_cas_reference(&mut self, blake3_hash: [u8; 32], kind: u32, uncompressed_size: u64) {
+        let mut hash_prefix = [0u8; 8];
+        hash_prefix.copy_from_slice(&blake3_hash[..8]);
+        let name_hash = u64::from_le_bytes(hash_prefix);
+
+        let desc = FlatBundleItemDesc {
+            name_hash,
+            file_offset: 0,
+            byte_length: 0,
+            asset_kind: kind,
+            compression: FLAG_CAS_REFERENCE,
+            uncompressed_size,
+            _pad: [0; 24],
+        };
+
         self.items.push(desc);
     }
 
