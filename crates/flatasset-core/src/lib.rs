@@ -2,7 +2,7 @@
 //!
 //! Provides unified discovery, verification, and inspection across all Flat formats:
 //! - `.flm`: FlatMesh (Skeletal rigs, meshlets, animations)
-//! - `.flt`: FlatTex (GPU Direct-DMA textures & compressed blocks)
+//! - `.flt`: FlatTexture (GPU Direct-DMA textures & compressed blocks)
 //! - `.flw`: FlatWorld (Meshlets, Q-BVH4 collision, succinct PVS)
 //! - `.fld`: FlatDemo (Columnar deterministic replay streams)
 //! - `.flb`: FlatBundle (Multi-asset zero-alloc package container)
@@ -30,6 +30,6 @@ pub use script::{ScriptEngineId, ScriptExecutionFlags, ScriptLumpDesc};
 // Re-export underlying ecosystem core crates
 pub use flatasset_audio as audio;
 pub use flatasset_mesh as mesh;
-pub use flatasset_tex as tex;
+pub use flatasset_texture as texture;
 pub use flatasset_world as world;
 pub use flatdemo_core as demo;

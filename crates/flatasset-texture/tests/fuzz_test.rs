@@ -1,7 +1,7 @@
 //! Adversarial property-based fuzzing and edge-case boundary violation tests for FlatTex.
 
-use flatasset_tex::{
-    FlatMipDesc, FlatTexError, FlatTexHeader, FlatTexView, FormatSignature, VkFormat,
+use flatasset_texture::{
+    FlatMipDesc, FlatTextureError, FlatTextureHeader, FlatTextureView, FormatSignature, VkFormat,
 };
 use proptest::prelude::*;
 use zerocopy::IntoBytes;
@@ -15,7 +15,7 @@ fn build_valid_flattex() -> AlignedStorage<8192> {
     let mut storage = AlignedStorage { data: [0u8; 8192] };
     let buffer = &mut storage.data;
 
-    let header_size = core::mem::size_of::<FlatTexHeader>();
+    let header_size = core::mem::size_of::<FlatTextureHeader>();
     let mip_table_offset = 32;
     let mip_count = 2;
     let mip_table_size = mip_count * core::mem::size_of::<FlatMipDesc>();
@@ -28,8 +28,8 @@ fn build_valid_flattex() -> AlignedStorage<8192> {
     let mip1_size = 2048u32;
     let mip1_pitch = 256u32;
 
-    let header = FlatTexHeader {
-        signature: FormatSignature::FLATTEX_V1_0,
+    let header = FlatTextureHeader {
+        signature: FormatSignature::FLATTEXTURE_V1_0,
         total_payload_kb: 8,
         vk_format: VkFormat::Bc1RgbSrgbBlock as u16,
         width: 64,
@@ -38,7 +38,7 @@ fn build_valid_flattex() -> AlignedStorage<8192> {
         mip_table_offset_div32: 1, // 32 bytes
         payload_offset_div256: 2,  // 512 bytes
         mip_levels: mip_count as u8,
-        flags: FlatTexHeader::FLAG_SRGB,
+        flags: FlatTextureHeader::FLAG_SRGB,
         _reserved: [0; 6],
     };
     buffer[..header_size].copy_from_slice(header.as_bytes());
@@ -78,7 +78,7 @@ proptest! {
         slice.copy_from_slice(&payload);
 
         // Reader MUST safely return Result::Err and never panic or trigger undefined behavior
-        let _ = FlatTexView::new(slice);
+        let _ = FlatTextureView::new(slice);
     }
 
     #[test]
@@ -91,7 +91,7 @@ proptest! {
         }
 
         // View mounting must safely return Ok or Err, never panic
-        let _ = FlatTexView::new(&storage.data);
+        let _ = FlatTextureView::new(&storage.data);
     }
 }
 
@@ -104,10 +104,10 @@ fn test_edge_case_header_buffer_too_small() {
     let storage = AlignedStorage { data: [0u8; 64] };
     for len in [0, 1, 2, 7, 15, 16, 31] {
         let slice = &storage.data[..len];
-        let err = FlatTexView::new(slice).unwrap_err();
+        let err = FlatTextureView::new(slice).unwrap_err();
         assert_eq!(
             err,
-            FlatTexError::BufferTooSmall {
+            FlatTextureError::BufferTooSmall {
                 required: 32,
                 actual: len,
             }
@@ -122,8 +122,8 @@ fn test_edge_case_corrupted_signature() {
         let original = storage.data[byte_idx];
         storage.data[byte_idx] = original ^ 0xFF;
 
-        let err = FlatTexView::new(&storage.data).unwrap_err();
-        assert!(matches!(err, FlatTexError::InvalidSignature { .. }));
+        let err = FlatTextureView::new(&storage.data).unwrap_err();
+        assert!(matches!(err, FlatTextureError::InvalidSignature { .. }));
 
         // Restore byte
         storage.data[byte_idx] = original;
@@ -138,16 +138,16 @@ fn test_edge_case_version_boundaries() {
     for major in [0u8, 2, 3, 255] {
         let sig = FormatSignature::pack(*b"FLTTEX", major, 0);
         storage.data[..8].copy_from_slice(&sig.0.to_le_bytes());
-        let err = FlatTexView::new(&storage.data).unwrap_err();
-        assert!(matches!(err, FlatTexError::InvalidSignature { .. }));
+        let err = FlatTextureView::new(&storage.data).unwrap_err();
+        assert!(matches!(err, FlatTextureError::InvalidSignature { .. }));
     }
 
     // Minor version boundary (minor == 255) must fail
     for minor in [1u8, 128, 255] {
         let sig = FormatSignature::pack(*b"FLTTEX", 1, minor);
         storage.data[..8].copy_from_slice(&sig.0.to_le_bytes());
-        let err = FlatTexView::new(&storage.data).unwrap_err();
-        assert!(matches!(err, FlatTexError::InvalidSignature { .. }));
+        let err = FlatTextureView::new(&storage.data).unwrap_err();
+        assert!(matches!(err, FlatTextureError::InvalidSignature { .. }));
     }
 }
 
@@ -158,8 +158,8 @@ fn test_edge_case_u16_u32_u64_max_overflows() {
     // 1. mip_table_offset_div32 overflow (u16::MAX * 32 = 2,097,120 bytes)
     let bad_table_offset = u16::MAX.to_le_bytes();
     storage.data[20..22].copy_from_slice(&bad_table_offset);
-    let err = FlatTexView::new(&storage.data).unwrap_err();
-    assert!(matches!(err, FlatTexError::OutOfBounds { .. }));
+    let err = FlatTextureView::new(&storage.data).unwrap_err();
+    assert!(matches!(err, FlatTextureError::OutOfBounds { .. }));
 
     // Reset table offset
     storage.data[20..22].copy_from_slice(&1u16.to_le_bytes());
@@ -168,8 +168,8 @@ fn test_edge_case_u16_u32_u64_max_overflows() {
     // Put table close to end so it overflows
     storage.data[20..22].copy_from_slice(&200u16.to_le_bytes()); // 6400 bytes
     storage.data[24] = 255; // 6400 + 4080 = 10480 > 8192
-    let err = FlatTexView::new(&storage.data).unwrap_err();
-    assert!(matches!(err, FlatTexError::OutOfBounds { .. }));
+    let err = FlatTextureView::new(&storage.data).unwrap_err();
+    assert!(matches!(err, FlatTextureError::OutOfBounds { .. }));
 
     // Reset table offset and mip_levels
     storage.data[20..22].copy_from_slice(&1u16.to_le_bytes());
@@ -179,21 +179,21 @@ fn test_edge_case_u16_u32_u64_max_overflows() {
     let max_u64 = u64::MAX.to_le_bytes();
     // Offset in mip 0 is at offset 32 + 0 = 32
     storage.data[32..40].copy_from_slice(&max_u64);
-    let err = FlatTexView::new(&storage.data).unwrap_err();
-    assert!(matches!(err, FlatTexError::OutOfBounds { .. }));
+    let err = FlatTextureView::new(&storage.data).unwrap_err();
+    assert!(matches!(err, FlatTextureError::OutOfBounds { .. }));
 
     // 4. Mip byte_size = u32::MAX
     storage.data[32..40].copy_from_slice(&512u64.to_le_bytes());
     storage.data[40..44].copy_from_slice(&u32::MAX.to_le_bytes());
-    let err = FlatTexView::new(&storage.data).unwrap_err();
-    assert!(matches!(err, FlatTexError::OutOfBounds { .. }));
+    let err = FlatTextureView::new(&storage.data).unwrap_err();
+    assert!(matches!(err, FlatTextureError::OutOfBounds { .. }));
 
     // 5. Mip checked_add overflow: offset = u64::MAX - 10, byte_size = 100
     let huge_offset = (u64::MAX - 10).to_le_bytes();
     storage.data[32..40].copy_from_slice(&huge_offset);
     storage.data[40..44].copy_from_slice(&100u32.to_le_bytes());
-    let err = FlatTexView::new(&storage.data).unwrap_err();
-    assert!(matches!(err, FlatTexError::OutOfBounds { .. }));
+    let err = FlatTextureView::new(&storage.data).unwrap_err();
+    assert!(matches!(err, FlatTextureError::OutOfBounds { .. }));
 
     // 6. Max row pitch div 256 = u16::MAX
     storage.data[32..40].copy_from_slice(&512u64.to_le_bytes());
@@ -201,12 +201,12 @@ fn test_edge_case_u16_u32_u64_max_overflows() {
     storage.data[44..46].copy_from_slice(&u16::MAX.to_le_bytes());
     // Inconsistent descriptor: pitch * rows > byte_size must be rejected
     storage.data[46..48].copy_from_slice(&1u16.to_le_bytes());
-    let err = FlatTexView::new(&storage.data).unwrap_err();
-    assert!(matches!(err, FlatTexError::InvalidLayout));
+    let err = FlatTextureView::new(&storage.data).unwrap_err();
+    assert!(matches!(err, FlatTextureError::InvalidLayout));
 
     // An empty subresource with no rows is still valid
     storage.data[46..48].copy_from_slice(&0u16.to_le_bytes());
-    let view = FlatTexView::new(&storage.data).expect("Row pitch u16::MAX must mount safely");
+    let view = FlatTextureView::new(&storage.data).expect("Row pitch u16::MAX must mount safely");
     assert_eq!(view.mips()[0].aligned_row_pitch(), 65535 * 256);
 }
 
@@ -219,11 +219,11 @@ fn test_edge_case_all_non_32_byte_alignments() {
     // Slicing at any non-32-byte boundary (1..31 mod 32) must return Misaligned
     for shift in 1..32 {
         let slice = &storage.data[shift..];
-        let err = FlatTexView::new(slice).unwrap_err();
+        let err = FlatTextureView::new(slice).unwrap_err();
         let expected_misalign = (base_ptr + shift) % 32;
         assert_eq!(
             err,
-            FlatTexError::Misaligned {
+            FlatTextureError::Misaligned {
                 required: 32,
                 actual: expected_misalign,
             }
@@ -236,8 +236,8 @@ fn test_edge_case_circular_or_overlapping_mips() {
     let mut storage = AlignedStorage { data: [0u8; 8192] };
     let buffer = &mut storage.data;
 
-    let header = FlatTexHeader {
-        signature: FormatSignature::FLATTEX_V1_0,
+    let header = FlatTextureHeader {
+        signature: FormatSignature::FLATTEXTURE_V1_0,
         total_payload_kb: 8,
         vk_format: VkFormat::Bc1RgbSrgbBlock as u16,
         width: 64,
@@ -268,7 +268,7 @@ fn test_edge_case_circular_or_overlapping_mips() {
     ];
     buffer[32..64].copy_from_slice(mips.as_bytes());
 
-    let view = FlatTexView::new(buffer).expect("Overlapping in-bounds mips must mount safely");
+    let view = FlatTextureView::new(buffer).expect("Overlapping in-bounds mips must mount safely");
     assert_eq!(view.mips().len(), 2);
     let s0 = view.mip_bytes(0).unwrap();
     let s1 = view.mip_bytes(1).unwrap();
@@ -284,8 +284,8 @@ fn test_edge_case_circular_or_overlapping_mips() {
     }];
     buffer[32..48].copy_from_slice(bad_mips.as_bytes());
     buffer[24] = 1; // 1 mip level
-    let err = FlatTexView::new(buffer).unwrap_err();
-    assert!(matches!(err, FlatTexError::OutOfBounds { .. }));
+    let err = FlatTextureView::new(buffer).unwrap_err();
+    assert!(matches!(err, FlatTextureError::OutOfBounds { .. }));
 }
 
 #[test]
@@ -293,8 +293,8 @@ fn test_edge_case_extreme_dimensions() {
     let mut storage = build_valid_flattex();
 
     // Test zero dimensions
-    let header_zeros = FlatTexHeader {
-        signature: FormatSignature::FLATTEX_V1_0,
+    let header_zeros = FlatTextureHeader {
+        signature: FormatSignature::FLATTEXTURE_V1_0,
         total_payload_kb: 0,
         vk_format: VkFormat::R8G8B8A8Unorm as u16,
         width: 0,
@@ -307,13 +307,13 @@ fn test_edge_case_extreme_dimensions() {
         _reserved: [0; 6],
     };
     storage.data[..32].copy_from_slice(header_zeros.as_bytes());
-    let view = FlatTexView::new(&storage.data).expect("Zero dimensions must mount safely");
+    let view = FlatTextureView::new(&storage.data).expect("Zero dimensions must mount safely");
     assert_eq!(view.header().width, 0);
     assert_eq!(view.header().height, 0);
 
     // Test max dimensions
-    let header_max = FlatTexHeader {
-        signature: FormatSignature::FLATTEX_V1_0,
+    let header_max = FlatTextureHeader {
+        signature: FormatSignature::FLATTEXTURE_V1_0,
         total_payload_kb: u32::MAX,
         vk_format: VkFormat::R8G8B8A8Unorm as u16,
         width: u16::MAX,
@@ -326,7 +326,7 @@ fn test_edge_case_extreme_dimensions() {
         _reserved: [0xFF; 6],
     };
     storage.data[..32].copy_from_slice(header_max.as_bytes());
-    let view2 = FlatTexView::new(&storage.data).expect("Max dimensions must mount safely");
+    let view2 = FlatTextureView::new(&storage.data).expect("Max dimensions must mount safely");
     assert_eq!(view2.header().width, u16::MAX);
     assert_eq!(view2.header().total_payload_kb, u32::MAX);
 }
@@ -336,8 +336,8 @@ fn test_edge_case_negative_strides_and_zero_element_mips() {
     let mut storage = AlignedStorage { data: [0u8; 1024] };
     let buffer = &mut storage.data;
 
-    let header = FlatTexHeader {
-        signature: FormatSignature::FLATTEX_V1_0,
+    let header = FlatTextureHeader {
+        signature: FormatSignature::FLATTEXTURE_V1_0,
         total_payload_kb: 0,
         vk_format: VkFormat::R8G8B8A8Unorm as u16,
         width: 0,
@@ -351,12 +351,12 @@ fn test_edge_case_negative_strides_and_zero_element_mips() {
     };
     buffer[..32].copy_from_slice(header.as_bytes());
 
-    let view = FlatTexView::new(buffer).expect("0 mip levels must mount safely");
+    let view = FlatTextureView::new(buffer).expect("0 mip levels must mount safely");
     assert_eq!(view.mips().len(), 0);
     let err = view.mip_bytes(0).unwrap_err();
     assert!(matches!(
         err,
-        FlatTexError::MipOutOfBounds {
+        FlatTextureError::MipOutOfBounds {
             requested: 0,
             max: 0
         }
@@ -372,7 +372,7 @@ fn test_edge_case_negative_strides_and_zero_element_mips() {
     };
     buffer[32..48].copy_from_slice(mip_zero.as_bytes());
 
-    let view_zero = FlatTexView::new(buffer).expect("0-sized mip must mount safely");
+    let view_zero = FlatTextureView::new(buffer).expect("0-sized mip must mount safely");
     let sub = view_zero
         .mip_bytes(0)
         .expect("Must return empty slice for 0 byte_size");

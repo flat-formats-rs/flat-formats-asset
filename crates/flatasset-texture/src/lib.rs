@@ -1,6 +1,6 @@
-//! # flattex-core
+//! # flatasset-texture
 //!
-//! Direct-to-GPU DMA 256-byte row-pitch pre-aligned texture container format.
+//! Direct-to-GPU DMA 256-byte row-pitch pre-aligned texture container format (`.flt` - FlatTexture).
 //!
 //! Eliminates host-side CPU repacking and re-allocations during texture uploads.
 //! All subresources conform to WGPU (`COPY_BYTES_PER_ROW_ALIGNMENT = 256`),
@@ -23,10 +23,10 @@ pub mod reader;
 pub mod streaming;
 
 pub use bc1::{encode_bc1_block, encode_rgba_to_bc1_dma};
-pub use builder::{FlatTexBuilder, MipInput};
-pub use error::{FlatTexError, Result};
+pub use builder::{FlatTextureBuilder, MipInput};
+pub use error::{FlatTextureError, Result};
 pub use format::VkFormat;
-pub use header::{FlatTexHeader, FormatSignature};
+pub use header::{FlatTextureHeader, FormatSignature};
 pub use mip::FlatMipDesc;
-pub use reader::FlatTexView;
+pub use reader::FlatTextureView;
 pub use streaming::{stream_copy, CONTAINER_PAYLOAD_OFFSET_4KB, DIRECT_STORAGE_SECTOR_ALIGNMENT};

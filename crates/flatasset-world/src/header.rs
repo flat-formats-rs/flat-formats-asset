@@ -23,7 +23,7 @@ pub enum LumpType {
     VisibilityBitmask = 3,
     /// Strongly typed KDL scene and entity graph.
     EntityGraph = 4,
-    /// Material and FlatTex texture manifest.
+    /// Material and FlatTexture manifest.
     MaterialManifest = 5,
     /// Pre-baked lightmap luxels or probe volumes.
     Lightmaps = 6,

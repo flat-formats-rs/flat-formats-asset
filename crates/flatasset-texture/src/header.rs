@@ -1,4 +1,4 @@
-//! Container header and packed format signature for FlatTex.
+//! Container header and packed format signature for FlatTexture.
 
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
@@ -8,8 +8,8 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 pub struct FormatSignature(pub u64);
 
 impl FormatSignature {
-    /// Canonical v1.0 signature for FlatTex (`b"FLTTEX"` + major 1 + minor 0).
-    pub const FLATTEX_V1_0: Self = Self::pack(*b"FLTTEX", 1, 0);
+    /// Canonical v1.0 signature for FlatTexture (`b"FLTTEX"` + major 1 + minor 0).
+    pub const FLATTEXTURE_V1_0: Self = Self::pack(*b"FLTTEX", 1, 0);
 
     pub const fn pack(magic: [u8; 6], major: u8, minor: u8) -> Self {
         let m = u64::from_le_bytes([
@@ -37,7 +37,7 @@ const _: () = assert!(core::mem::align_of::<FormatSignature>() == 8);
 /// Zero padding holes with natural field alignment.
 #[derive(Copy, Clone, Debug, FromBytes, Immutable, IntoBytes, KnownLayout)]
 #[repr(C, align(32))]
-pub struct FlatTexHeader {
+pub struct FlatTextureHeader {
     /// 8 bytes (offset 0..8): Packed Magic + Major/Minor version.
     pub signature: FormatSignature,
     /// 4 bytes (offset 8..12): Total payload byte length in kilobytes.
@@ -62,10 +62,10 @@ pub struct FlatTexHeader {
     pub _reserved: [u8; 6],
 }
 
-const _: () = assert!(core::mem::size_of::<FlatTexHeader>() == 32);
-const _: () = assert!(core::mem::align_of::<FlatTexHeader>() == 32);
+const _: () = assert!(core::mem::size_of::<FlatTextureHeader>() == 32);
+const _: () = assert!(core::mem::align_of::<FlatTextureHeader>() == 32);
 
-impl FlatTexHeader {
+impl FlatTextureHeader {
     pub const FLAG_SRGB: u8 = 1 << 0;
     pub const FLAG_NORMAL_MAP: u8 = 1 << 1;
     pub const FLAG_HAS_PALETTE: u8 = 1 << 2;

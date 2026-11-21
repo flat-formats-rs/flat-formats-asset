@@ -1,5 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use flatasset_tex::{FlatMipDesc, FlatTexHeader, FlatTexView, FormatSignature, VkFormat};
+use flatasset_texture::{
+    FlatMipDesc, FlatTextureHeader, FlatTextureView, FormatSignature, VkFormat,
+};
 use image::{ImageBuffer, Rgba};
 use std::io::Cursor;
 use std::time::Duration;
@@ -69,7 +71,7 @@ fn compute_mip_count(mut w: u32, mut h: u32) -> u8 {
 }
 
 fn create_test_flattex(width: u32, height: u32, mip_levels: u8) -> (AlignedBuffer, usize) {
-    let header_size = core::mem::size_of::<FlatTexHeader>();
+    let header_size = core::mem::size_of::<FlatTextureHeader>();
     let mip_table_size = (mip_levels as usize) * core::mem::size_of::<FlatMipDesc>();
     assert!(CONTAINER_MIP_TABLE_OFFSET + mip_table_size <= CONTAINER_PAYLOAD_OFFSET);
 
@@ -102,8 +104,8 @@ fn create_test_flattex(width: u32, height: u32, mip_levels: u8) -> (AlignedBuffe
     let total_payload_bytes = cur_offset - CONTAINER_PAYLOAD_OFFSET;
     let total_payload_kb = (total_payload_bytes.div_ceil(1024)) as u32;
 
-    let header = FlatTexHeader {
-        signature: FormatSignature::FLATTEX_V1_0,
+    let header = FlatTextureHeader {
+        signature: FormatSignature::FLATTEXTURE_V1_0,
         total_payload_kb,
         vk_format: VkFormat::R8G8B8A8Srgb as u16,
         width: width as u16,
@@ -112,7 +114,7 @@ fn create_test_flattex(width: u32, height: u32, mip_levels: u8) -> (AlignedBuffe
         mip_table_offset_div32: (CONTAINER_MIP_TABLE_OFFSET / 32) as u16,
         payload_offset_div256: (CONTAINER_PAYLOAD_OFFSET / 256) as u16,
         mip_levels,
-        flags: FlatTexHeader::FLAG_SRGB,
+        flags: FlatTextureHeader::FLAG_SRGB,
         _reserved: [0; 6],
     };
     slice[..header_size].copy_from_slice(header.as_bytes());
@@ -162,13 +164,13 @@ fn bench_cold_mount_latency(c: &mut Criterion) {
         let flattex_slice = flattex_buf.slice(total_size);
         let png_bytes = create_test_png(ds.width, ds.height);
 
-        // 1. FlatTexView zero-alloc mount
+        // 1. FlatTextureView zero-alloc mount
         group.bench_with_input(
-            BenchmarkId::new("FlatTexView_mount_zero_alloc", ds.name),
+            BenchmarkId::new("FlatTextureView_mount_zero_alloc", ds.name),
             &flattex_slice,
             |b, &slice| {
                 b.iter(|| {
-                    let view = FlatTexView::new(black_box(slice)).unwrap();
+                    let view = FlatTextureView::new(black_box(slice)).unwrap();
                     black_box(view.header().signature);
                 });
             },
@@ -203,7 +205,7 @@ fn bench_staging_dma_row_pitch_extraction(c: &mut Criterion) {
     for ds in &TEXTURE_DATASETS {
         let (flattex_buf, total_size) = create_test_flattex(ds.width, ds.height, ds.mip_levels);
         let flattex_slice = flattex_buf.slice(total_size);
-        let view = FlatTexView::new(flattex_slice).unwrap();
+        let view = FlatTextureView::new(flattex_slice).unwrap();
 
         let unpadded_rgba = create_unpadded_rgba(ds.width, ds.height);
 

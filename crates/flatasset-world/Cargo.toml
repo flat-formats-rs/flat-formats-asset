@@ -11,7 +11,7 @@ homepage.workspace = true
 [dependencies]
 silicon-kit = { workspace = true }
 flatasset-mesh = { workspace = true, optional = true }
-flatasset-tex = { workspace = true, optional = true }
+flatasset-texture = { workspace = true, optional = true }
 odd-int = { workspace = true }
 narrow-ptr = { workspace = true }
 zerocopy = { workspace = true }
@@ -26,7 +26,7 @@ std = ["zerocopy/std"]
 blake3 = ["dep:blake3"]
 zstd = ["dep:zstd"]
 mesh = ["dep:flatasset-mesh"]
-texture = ["dep:flatasset-tex"]
+texture = ["dep:flatasset-texture"]
 
 [dev-dependencies]
 criterion = { workspace = true }

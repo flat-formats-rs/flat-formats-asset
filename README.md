@@ -8,7 +8,7 @@
 
 It unifies the four specialized binary container standards:
 1. **FlatMesh (`.flm`)**: Skeletal geometry, meshlets, bone weight quantization, and animation tracks.
-2. **FlatTex (`.flt`)**: GPU Direct-DMA BC1..BC7 / ASTC textures with 256-byte row-pitch pre-alignment.
+2. **FlatTexture (`.flt`)**: GPU Direct-DMA BC1..BC7 / ASTC textures with 256-byte row-pitch pre-alignment.
 3. **FlatWorld (`.flw`)**: Map geometry, 4-way SIMD Q-BVH collision, and succinct bitmask PVS.
 4. **FlatDemo (`.fld`)**: Columnar deterministic replay streams with $O(1)$ arbitrary tick random seek.
 5. **FlatBundle (`.flb`)**: Heterogeneous multi-asset container with 64-byte alignment and BLAKE3 Merkle integrity.

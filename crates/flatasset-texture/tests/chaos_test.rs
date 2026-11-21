@@ -1,7 +1,7 @@
-//! Chaos and fault injection resilience tests for FlatTex.
+//! Chaos and fault injection resilience tests for FlatTexture.
 
-use flatasset_tex::{
-    FlatMipDesc, FlatTexError, FlatTexHeader, FlatTexView, FormatSignature, VkFormat,
+use flatasset_texture::{
+    FlatMipDesc, FlatTextureError, FlatTextureHeader, FlatTextureView, FormatSignature, VkFormat,
 };
 use zerocopy::IntoBytes;
 
@@ -15,8 +15,8 @@ fn test_chaos_truncated_payload() {
     let mut storage = AlignedStorage { data: [0u8; 128] };
     let buffer = &mut storage.data;
 
-    let header = FlatTexHeader {
-        signature: FormatSignature::FLATTEX_V1_0,
+    let header = FlatTextureHeader {
+        signature: FormatSignature::FLATTEXTURE_V1_0,
         total_payload_kb: 4,
         vk_format: VkFormat::Bc1RgbSrgbBlock as u16,
         width: 64,
@@ -39,8 +39,8 @@ fn test_chaos_truncated_payload() {
     };
     buffer[32..48].copy_from_slice(mip.as_bytes());
 
-    let err = FlatTexView::new(buffer).unwrap_err();
-    assert!(matches!(err, FlatTexError::OutOfBounds { .. }));
+    let err = FlatTextureView::new(buffer).unwrap_err();
+    assert!(matches!(err, FlatTextureError::OutOfBounds { .. }));
 }
 
 #[test]
@@ -48,8 +48,8 @@ fn test_chaos_misaligned_row_pitch() {
     let mut storage = AlignedStorage { data: [0u8; 128] };
     let buffer = &mut storage.data;
 
-    let header = FlatTexHeader {
-        signature: FormatSignature::FLATTEX_V1_0,
+    let header = FlatTextureHeader {
+        signature: FormatSignature::FLATTEXTURE_V1_0,
         total_payload_kb: 4,
         vk_format: VkFormat::Bc1RgbSrgbBlock as u16,
         width: 64,
@@ -72,8 +72,8 @@ fn test_chaos_misaligned_row_pitch() {
 fn test_chaos_misaligned_container_buffer() {
     let storage = AlignedStorage { data: [0u8; 128] };
     let misaligned_slice = &storage.data[1..];
-    let err = FlatTexView::new(misaligned_slice).unwrap_err();
-    assert!(matches!(err, FlatTexError::Misaligned { .. }));
+    let err = FlatTextureView::new(misaligned_slice).unwrap_err();
+    assert!(matches!(err, FlatTextureError::Misaligned { .. }));
 }
 
 #[test]
@@ -81,8 +81,8 @@ fn test_chaos_mip_out_of_bounds_query() {
     let mut storage = AlignedStorage { data: [0u8; 1024] };
     let buffer = &mut storage.data;
 
-    let header = FlatTexHeader {
-        signature: FormatSignature::FLATTEX_V1_0,
+    let header = FlatTextureHeader {
+        signature: FormatSignature::FLATTEXTURE_V1_0,
         total_payload_kb: 1,
         vk_format: VkFormat::Bc1RgbSrgbBlock as u16,
         width: 64,
@@ -104,11 +104,11 @@ fn test_chaos_mip_out_of_bounds_query() {
     };
     buffer[32..48].copy_from_slice(mip.as_bytes());
 
-    let view = FlatTexView::new(buffer).expect("Mount should succeed");
+    let view = FlatTextureView::new(buffer).expect("Mount should succeed");
     let err = view.mip_bytes(1).unwrap_err();
     assert_eq!(
         err,
-        FlatTexError::MipOutOfBounds {
+        FlatTextureError::MipOutOfBounds {
             requested: 1,
             max: 1
         }
@@ -120,8 +120,8 @@ fn test_chaos_mip_table_overflow_past_buffer() {
     let mut storage = AlignedStorage { data: [0u8; 128] };
     let buffer = &mut storage.data;
 
-    let header = FlatTexHeader {
-        signature: FormatSignature::FLATTEX_V1_0,
+    let header = FlatTextureHeader {
+        signature: FormatSignature::FLATTEXTURE_V1_0,
         total_payload_kb: 1,
         vk_format: VkFormat::Bc1RgbSrgbBlock as u16,
         width: 64,
@@ -135,6 +135,6 @@ fn test_chaos_mip_table_overflow_past_buffer() {
     };
     buffer[..32].copy_from_slice(header.as_bytes());
 
-    let err = FlatTexView::new(buffer).unwrap_err();
-    assert!(matches!(err, FlatTexError::OutOfBounds { .. }));
+    let err = FlatTextureView::new(buffer).unwrap_err();
+    assert!(matches!(err, FlatTextureError::OutOfBounds { .. }));
 }

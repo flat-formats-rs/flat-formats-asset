@@ -7,7 +7,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use flatasset_core::bundle::FlatBundleView;
-use flatasset_tex::FlatTexView;
+use flatasset_texture::FlatTextureView;
 use flatasset_world::FlatWorldView;
 use std::fs;
 
@@ -119,7 +119,7 @@ pub fn bench_bundle_vs_bsp(c: &mut Criterion) {
             let (_, tex_bytes) = bundle.get_item(1).unwrap();
 
             let world_view = FlatWorldView::new(world_bytes).unwrap();
-            let tex_view = FlatTexView::new(tex_bytes).unwrap();
+            let tex_view = FlatTextureView::new(tex_bytes).unwrap();
 
             black_box((world_view.header().lump_count, tex_view.header().mip_levels))
         });

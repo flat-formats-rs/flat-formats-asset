@@ -15,7 +15,7 @@ path = "src/main.rs"
 [dependencies]
 flatasset-core = { workspace = true }
 flatasset-mesh = { workspace = true }
-flatasset-tex = { workspace = true }
+flatasset-texture = { workspace = true }
 flatasset-world = { workspace = true }
 flatasset-audio = { workspace = true }
 flatdemo-core = { workspace = true }
