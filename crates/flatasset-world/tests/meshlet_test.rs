@@ -51,10 +51,9 @@ fn test_meshlet_builder_synthetic_and_roundtrip() {
         meshlet.bounding_sphere[1],
         meshlet.bounding_sphere[2],
     ];
-    let radius = meshlet.bounding_sphere[3];
 
     for (i, v) in verts.iter().enumerate() {
-        let restored = dequantize_cluster_position(v.q_pos, center, radius);
+        let restored = dequantize_cluster_position(v.q_pos, center);
         let orig = [v0, v1, v2][i].position;
         for axis in 0..3 {
             let diff = (restored[axis] - orig[axis]).abs();
@@ -105,7 +104,7 @@ fn test_real_inferno_meshlet_extraction_and_invariants() {
         }
 
         for v in verts {
-            let p = dequantize_cluster_position(v.q_pos, center, radius);
+            let p = dequantize_cluster_position(v.q_pos, center);
             let dx = p[0] - center[0];
             let dy = p[1] - center[1];
             let dz = p[2] - center[2];

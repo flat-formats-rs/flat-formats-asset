@@ -14,11 +14,20 @@ pub const MAX_MESHLET_VERTICES: usize = 64;
 /// Maximum micro-triangles per meshlet cluster.
 pub const MAX_MESHLET_TRIANGLES: usize = 126;
 
+/// Power-of-two quantization grid step for watertight meshlet reconstruction.
+///
+/// 1/64th of a game unit (~0.396 mm) guarantees sub-millimeter precision while ensuring
+/// identical floating point reconstruction across adjacent clusters sharing common vertices.
+pub const MESHLET_GRID_STEP: f32 = 1.0 / 64.0;
+/// Inverse of `MESHLET_GRID_STEP` (64.0) for integer grid snapping.
+pub const MESHLET_GRID_SCALE: f32 = 64.0;
+
 /// 32-byte Meshlet Cluster Descriptor for GPU-driven and indirect rasterization.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, FromBytes, IntoBytes, KnownLayout, Immutable)]
 pub struct FlatWorldMeshlet {
-    /// Bounding sphere: Center [X, Y, Z] and Radius W for frustum culling (offset 0..16)
+    /// Bounding sphere: Center [X, Y, Z] and Radius W for frustum culling (offset 0..16).
+    /// Center [X, Y, Z] serves as the anchor point snapped to the global power-of-two grid.
     pub bounding_sphere: [f32; 4],
     /// Byte offset into the vertex stream (offset 16..20)
     pub vertex_offset: u32,
@@ -38,23 +47,25 @@ const _: () = assert!(size_of::<FlatWorldMeshlet>() == 32);
 
 /// 16-byte Cluster-Relative Quantized Vertex layout.
 ///
-/// Compresses 3D world positions down to 6 bytes (`[i16; 3]`) normalized to the
-/// meshlet bounding sphere radius: `world_pos = sphere_center + (q_pos / 32767.0) * sphere_radius`.
+/// Compresses 3D world positions down to 6 bytes (`[i16; 3]`) representing integer grid offsets
+/// relative to the cluster's grid-anchored bounding sphere center:
+/// `world_pos = anchor_center + q_pos * MESHLET_GRID_STEP`.
 ///
-/// Unpacked on GPU with 1 fused-multiply-add (`fma`) instruction.
+/// Unpacked on GPU with 1 fused-multiply-add (`fma`) instruction without rounding error or pinholes:
+/// `pos = anchor + float3(q_pos) * (1.0 / 64.0)`.
 #[repr(C, align(16))]
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, FromBytes, IntoBytes, KnownLayout, Immutable, Default,
 )]
 pub struct QuantizedMeshletVertex {
-    /// Position offset relative to cluster bounding sphere center: normalized `[-1.0..1.0]` as snorm16.
+    /// Integer grid offset relative to cluster anchor: range [-32768..32767] steps of 1/64 unit (~512 units reach).
     pub q_pos: [i16; 3],
+    /// Surface flags (material flags, surface audio type, penetration flags) (replaces former padding).
+    pub flags: u16,
     /// Primary texture coordinates encoded as IEEE 754 binary16 (half-float).
     pub uv: [u16; 2],
     /// Surface normal vector packed as snorm8 `[Nx, Ny, Nz, TangentSign]`.
     pub normal: [i8; 4],
-    /// Alignment padding to guarantee 16-byte GPU bus alignment.
-    pub _pad: [u8; 2],
 }
 
 const _: () = assert!(size_of::<QuantizedMeshletVertex>() == 16);
@@ -111,27 +122,41 @@ pub fn f32_to_f16(val: f32) -> u16 {
     ((sign << 15) | ((new_exp as u32) << 10) | (mant >> 13)) as u16
 }
 
-/// Quantizes an uncompressed 3D position relative to a cluster bounding sphere.
+/// Quantizes an uncompressed 3D position relative to a cluster grid anchor.
+///
+/// Snaps both the anchor and position to the global power-of-two grid (`1/64 unit`),
+/// guaranteeing watertight bit-identical vertex reconstruction across adjacent meshlets.
 #[inline]
-pub fn quantize_cluster_position(pos: [f32; 3], center: [f32; 3], radius: f32) -> [i16; 3] {
-    let inv_r = if radius > 1e-6 { 1.0 / radius } else { 0.0 };
+pub fn quantize_cluster_position(pos: [f32; 3], anchor: [f32; 3]) -> [i16; 3] {
     let mut q = [0i16; 3];
     for i in 0..3 {
-        let normalized = (pos[i] - center[i]) * inv_r;
-        let clamped = normalized.clamp(-1.0, 1.0);
-        q[i] = (clamped * 32767.0).round() as i16;
+        let global_grid = (pos[i] * MESHLET_GRID_SCALE).round();
+        let anchor_grid = (anchor[i] * MESHLET_GRID_SCALE).round();
+        let diff = global_grid - anchor_grid;
+        q[i] = diff.clamp(-32768.0, 32767.0) as i16;
     }
     q
 }
 
-/// Dequantizes a cluster-space snorm16 position back to world space.
+/// Dequantizes a cluster-space grid offset back to world space using 1 FMA operation.
+///
+/// Guaranteed to match bit-for-bit across any cluster referencing this position on the grid.
 #[inline]
-pub fn dequantize_cluster_position(q_pos: [i16; 3], center: [f32; 3], radius: f32) -> [f32; 3] {
-    let factor = radius / 32767.0;
+pub fn dequantize_cluster_position(q_pos: [i16; 3], anchor: [f32; 3]) -> [f32; 3] {
     [
-        center[0] + f32::from(q_pos[0]) * factor,
-        center[1] + f32::from(q_pos[1]) * factor,
-        center[2] + f32::from(q_pos[2]) * factor,
+        anchor[0] + f32::from(q_pos[0]) * MESHLET_GRID_STEP,
+        anchor[1] + f32::from(q_pos[1]) * MESHLET_GRID_STEP,
+        anchor[2] + f32::from(q_pos[2]) * MESHLET_GRID_STEP,
+    ]
+}
+
+/// Snaps a continuous 3D world coordinate to the global power-of-two quantization grid.
+#[inline]
+pub fn snap_to_grid(coord: [f32; 3]) -> [f32; 3] {
+    [
+        (coord[0] * MESHLET_GRID_SCALE).round() * MESHLET_GRID_STEP,
+        (coord[1] * MESHLET_GRID_SCALE).round() * MESHLET_GRID_STEP,
+        (coord[2] * MESHLET_GRID_SCALE).round() * MESHLET_GRID_STEP,
     ]
 }
 
@@ -334,15 +359,16 @@ impl MeshletClusterizer {
                 let positions: alloc::vec::Vec<[f32; 3]> =
                     verts.iter().map(|v| v.position).collect();
                 let sphere = compute_bounding_sphere(&positions);
-                let center = [sphere[0], sphere[1], sphere[2]];
-                let radius = sphere[3].max(0.001);
+                // Snap bounding sphere center to power-of-two grid to establish deterministic anchor
+                let anchor = snap_to_grid([sphere[0], sphere[1], sphere[2]]);
+                let snapped_sphere = [anchor[0], anchor[1], anchor[2], sphere[3].max(0.001)];
 
                 let v_offset = (out_v.len() * size_of::<QuantizedMeshletVertex>()) as u32;
                 let t_offset = (out_t.len() * size_of::<MicroTriangle>()) as u32;
 
-                // Quantize vertices relative to cluster bounding sphere
+                // Quantize vertices relative to cluster grid anchor (watertight across meshlet boundaries)
                 for v in verts.iter() {
-                    let q_pos = quantize_cluster_position(v.position, center, radius);
+                    let q_pos = quantize_cluster_position(v.position, anchor);
                     let uv = [f32_to_f16(v.uv[0]), f32_to_f16(v.uv[1])];
                     let norm = [
                         (v.normal[0].clamp(-1.0, 1.0) * 127.0).round() as i8,
@@ -352,9 +378,9 @@ impl MeshletClusterizer {
                     ];
                     out_v.push(QuantizedMeshletVertex {
                         q_pos,
+                        flags: 0,
                         uv,
                         normal: norm,
-                        _pad: [0; 2],
                     });
                 }
 
@@ -363,7 +389,7 @@ impl MeshletClusterizer {
                 }
 
                 out_m.push(FlatWorldMeshlet {
-                    bounding_sphere: sphere,
+                    bounding_sphere: snapped_sphere,
                     vertex_offset: v_offset,
                     triangle_offset: t_offset,
                     material_id: mat_id,
@@ -554,21 +580,42 @@ mod tests {
 
     #[test]
     fn test_quantization_submillimeter_precision() {
-        let center = [100.0, 200.0, 300.0];
-        let radius = 256.0; // 256 units (~6.5 meters)
+        let center = snap_to_grid([100.0, 200.0, 300.0]);
 
         let original = [150.25, 230.125, 290.875];
-        let q = quantize_cluster_position(original, center, radius);
-        let restored = dequantize_cluster_position(q, center, radius);
+        let q = quantize_cluster_position(original, center);
+        let restored = dequantize_cluster_position(q, center);
 
         for axis in 0..3 {
             let diff = (original[axis] - restored[axis]).abs();
-            // Expected precision: 256.0 / 32767.0 ~= 0.0078 units (<0.01 unit error)
+            // Expected precision: 1/64 = 0.015625 unit (<0.016 unit error, ~0.39 mm)
             assert!(
-                diff < 0.015,
+                diff < 0.016,
                 "axis {axis} precision loss too high: diff = {diff}"
             );
         }
+    }
+
+    #[test]
+    fn test_watertightness_identical_boundary_reconstruction() {
+        // Two adjacent meshlets with different anchor centers sharing a common boundary vertex
+        let anchor_a = snap_to_grid([100.0, 100.0, 0.0]);
+        let anchor_b = snap_to_grid([160.0, 100.0, 0.0]);
+
+        // Boundary vertex between them
+        let shared_vertex = [130.0, 100.0, 0.0];
+
+        let q_a = quantize_cluster_position(shared_vertex, anchor_a);
+        let q_b = quantize_cluster_position(shared_vertex, anchor_b);
+
+        let restored_a = dequantize_cluster_position(q_a, anchor_a);
+        let restored_b = dequantize_cluster_position(q_b, anchor_b);
+
+        // Bit-exact match guaranteed: 100% watertight, zero pinholes!
+        assert_eq!(
+            restored_a, restored_b,
+            "Boundary vertex reconstructed differently between clusters!"
+        );
     }
 
     #[test]
