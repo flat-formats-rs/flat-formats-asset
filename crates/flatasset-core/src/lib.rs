@@ -28,6 +28,7 @@ pub use identify::{identify_flat_asset, FlatAssetKind};
 pub use script::{ScriptEngineId, ScriptExecutionFlags, ScriptLumpDesc};
 
 // Re-export underlying ecosystem core crates
+pub use flatasset_audio as audio;
 pub use flatasset_mesh as mesh;
 pub use flatasset_tex as tex;
 pub use flatasset_world as world;

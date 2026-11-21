@@ -14,6 +14,8 @@ pub enum FlatAssetKind {
     Demo = 0x00444C46,
     /// `.flb`: FlatBundle (Magic: `b"FLTB"`, `0x42544C46`)
     Bundle = 0x42544C46,
+    /// `.fls`: FlatAudio / FlatSound (Magic: `b"FLTS"`, `0x53544C46`)
+    Audio = 0x53544C46,
     /// Unknown or unaligned binary payload
     Unknown = 0,
 }
@@ -27,6 +29,7 @@ impl FlatAssetKind {
             Self::World => "flw",
             Self::Demo => "fld",
             Self::Bundle => "flb",
+            Self::Audio => "fls",
             Self::Unknown => "bin",
         }
     }
@@ -39,6 +42,7 @@ impl FlatAssetKind {
             Self::World => "FlatWorld (Map/Geometry/BVH/PVS)",
             Self::Demo => "FlatDemo (Columnar Replay Stream)",
             Self::Bundle => "FlatBundle (Multi-Asset Container)",
+            Self::Audio => "FlatAudio (Direct-to-Mixer Audio/Opus)",
             Self::Unknown => "Unknown Binary Payload",
         }
     }
@@ -59,6 +63,7 @@ pub fn identify_flat_asset(bytes: &[u8]) -> FlatAssetKind {
         0x00574C46 => FlatAssetKind::World,
         0x00444C46 => FlatAssetKind::Demo,
         0x42544C46 => FlatAssetKind::Bundle,
+        0x53544C46 => FlatAssetKind::Audio,
         _ => FlatAssetKind::Unknown,
     }
 }

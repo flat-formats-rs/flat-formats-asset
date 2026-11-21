@@ -10,6 +10,7 @@ fn test_flatasset_identification() {
     let dummy_flw = b"FLW\x00\x01\x00\x00\x00data";
     let dummy_fld = b"FLD\x00\x01\x00\x00\x00data";
     let dummy_flb = b"FLTB\x01\x00\x00\x00data";
+    let dummy_fls = b"FLTS\x01\x00\x00\x00data";
     let dummy_bin = b"RIFF\x00\x00\x00\x00WAVE";
 
     assert_eq!(identify_flat_asset(dummy_flm), FlatAssetKind::Mesh);
@@ -17,6 +18,7 @@ fn test_flatasset_identification() {
     assert_eq!(identify_flat_asset(dummy_flw), FlatAssetKind::World);
     assert_eq!(identify_flat_asset(dummy_fld), FlatAssetKind::Demo);
     assert_eq!(identify_flat_asset(dummy_flb), FlatAssetKind::Bundle);
+    assert_eq!(identify_flat_asset(dummy_fls), FlatAssetKind::Audio);
     assert_eq!(identify_flat_asset(dummy_bin), FlatAssetKind::Unknown);
     assert_eq!(identify_flat_asset(b""), FlatAssetKind::Unknown);
 }

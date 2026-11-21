@@ -73,6 +73,17 @@ enum Commands {
         #[arg(short, long)]
         output: PathBuf,
     },
+    /// Converts a WAV audio file into a FlatAudio (.fls) Direct-to-Mixer container
+    ConvertWav {
+        /// Path to the .wav file
+        wav: PathBuf,
+        /// Output .fls file path
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Keep 8-bit unsigned PCM verbatim without expanding to 16-bit signed PCM
+        #[arg(long)]
+        keep_pcm8: bool,
+    },
     /// Microbenchmark for zero-copy inspection across assets
     BenchIdentify {
         /// Path to asset file
@@ -528,6 +539,29 @@ fn main() -> Result<()> {
                 "Successfully generated Cubemap FlatTex {:?} ({} KB, 6 faces)!",
                 output,
                 flt_bytes.len() / 1024
+            );
+        }
+        Commands::ConvertWav {
+            wav,
+            output,
+            keep_pcm8,
+        } => {
+            let wav_bytes = std::fs::read(&wav)
+                .with_context(|| format!("Failed to read WAV file {:?}", wav))?;
+            let fls_bytes = flatasset_audio::convert_wav_to_fls(&wav_bytes, !keep_pcm8)
+                .with_context(|| format!("Failed to convert WAV {:?}", wav))?;
+
+            if let Some(parent) = output.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(&output, &fls_bytes)
+                .with_context(|| format!("Failed to write FLS file {:?}", output))?;
+
+            println!(
+                "Successfully converted {:?} -> {:?} ({} bytes)!",
+                wav,
+                output,
+                fls_bytes.len()
             );
         }
         Commands::BenchIdentify { file, iterations } => {
