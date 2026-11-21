@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 mod adapters;
 use adapters::mdl::StudioMdlParser;
+use adapters::spr::convert_spr_to_flt;
 use adapters::wav::convert_wav_to_fls;
 
 #[derive(Parser)]
@@ -104,6 +105,14 @@ enum Commands {
         /// Compress bundle entries with Zstd (only valid with --bundle)
         #[arg(long)]
         compress: bool,
+    },
+    /// Converts a GoldSrc Sprite (.spr) file into a FlatTexture (.flt) Direct-to-GPU container
+    ConvertSpr {
+        /// Path to the input .spr file
+        spr: PathBuf,
+        /// Output .flt file path
+        #[arg(short, long)]
+        output: PathBuf,
     },
     /// Microbenchmark for zero-copy inspection across assets
     BenchIdentify {
@@ -734,6 +743,25 @@ fn main() -> Result<()> {
                     }
                 }
             }
+        }
+        Commands::ConvertSpr { spr, output } => {
+            let spr_bytes = std::fs::read(&spr)
+                .with_context(|| format!("Failed to read SPR file {:?}", spr))?;
+            let flt_bytes = convert_spr_to_flt(&spr_bytes)
+                .with_context(|| format!("Failed to convert SPR {:?}", spr))?;
+
+            if let Some(parent) = output.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(&output, &flt_bytes)
+                .with_context(|| format!("Failed to write FlatTexture to {:?}", output))?;
+
+            println!(
+                "Successfully converted SPR {:?} -> {:?} ({} bytes)!",
+                spr,
+                output,
+                flt_bytes.len()
+            );
         }
         Commands::BenchIdentify { file, iterations } => {
             let data = std::fs::read(&file)?;

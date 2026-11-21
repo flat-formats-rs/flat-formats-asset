@@ -4,4 +4,5 @@
 //! zero-allocation engine container libraries (`flatasset-mesh`, `flatasset-audio`, etc.).
 
 pub mod mdl;
+pub mod spr;
 pub mod wav;
