@@ -16,11 +16,13 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+pub mod adpcm;
 pub mod codec;
 pub mod error;
 pub mod header;
 pub mod reader;
 
+pub use adpcm::{decode_adpcm_to_pcm16, encode_pcm16_to_adpcm, AdpcmState};
 pub use codec::AudioCodecId;
 pub use error::{FlatAudioError, Result};
 pub use header::{FlatAudioHeader, FlatAudioPacketDesc, FLATAUDIO_MAGIC, FLATAUDIO_VERSION};
