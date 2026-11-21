@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 mod adapters;
 use adapters::mdl::StudioMdlParser;
+use adapters::wav::convert_wav_to_fls;
 
 #[derive(Parser)]
 #[command(name = "fla")]
@@ -594,7 +595,7 @@ fn main() -> Result<()> {
         } => {
             let wav_bytes = std::fs::read(&wav)
                 .with_context(|| format!("Failed to read WAV file {:?}", wav))?;
-            let fls_bytes = flatasset_audio::convert_wav_to_fls(&wav_bytes, !keep_pcm8)
+            let fls_bytes = convert_wav_to_fls(&wav_bytes, !keep_pcm8)
                 .with_context(|| format!("Failed to convert WAV {:?}", wav))?;
 
             if let Some(parent) = output.parent() {

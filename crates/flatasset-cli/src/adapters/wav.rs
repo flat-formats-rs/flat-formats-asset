@@ -1,9 +1,7 @@
 //! Lightweight zero-dependency RIFF WAVE parser and FlatAudio converter.
 
-use crate::builder::FlatAudioBuilder;
-use crate::codec::AudioCodecId;
-use crate::error::{FlatAudioError, Result};
-use alloc::vec::Vec;
+use anyhow::{bail, Result};
+use flatasset_audio::{AudioCodecId, FlatAudioBuilder};
 
 /// Parsed metadata from a RIFF WAVE file.
 #[derive(Debug, Clone)]
@@ -19,11 +17,11 @@ pub struct WavInfo<'a> {
 /// Parses a RIFF WAVE byte slice into structured metadata and PCM sample slice.
 pub fn parse_wav(bytes: &[u8]) -> Result<WavInfo<'_>> {
     if bytes.len() < 12 {
-        return Err(FlatAudioError::InvalidWav("file smaller than RIFF header"));
+        bail!("file smaller than RIFF header");
     }
 
     if &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
-        return Err(FlatAudioError::InvalidWav("missing RIFF/WAVE header"));
+        bail!("missing RIFF/WAVE header");
     }
 
     let mut pos = 12usize;
@@ -40,7 +38,7 @@ pub fn parse_wav(bytes: &[u8]) -> Result<WavInfo<'_>> {
         let chunk_size = u32::from_le_bytes(
             bytes[pos + 4..pos + 8]
                 .try_into()
-                .map_err(|_| FlatAudioError::InvalidWav("chunk size decode error"))?,
+                .map_err(|_| anyhow::anyhow!("chunk size decode error"))?,
         ) as usize;
 
         let chunk_data_start = pos + 8;
@@ -51,15 +49,13 @@ pub fn parse_wav(bytes: &[u8]) -> Result<WavInfo<'_>> {
             if data_slice.is_some() && audio_format.is_some() {
                 break;
             }
-            return Err(FlatAudioError::InvalidWav(
-                "chunk bounds exceed file length",
-            ));
+            bail!("chunk bounds exceed file length");
         }
 
         match chunk_id {
             b"fmt " => {
                 if chunk_size < 16 {
-                    return Err(FlatAudioError::InvalidWav("fmt chunk too small"));
+                    bail!("fmt chunk too small");
                 }
                 let fmt_slice = &bytes[chunk_data_start..chunk_data_end];
                 let w_format = u16::from_le_bytes([fmt_slice[0], fmt_slice[1]]);
@@ -137,16 +133,16 @@ pub fn parse_wav(bytes: &[u8]) -> Result<WavInfo<'_>> {
         pos = chunk_data_end + pad;
     }
 
-    let fmt = audio_format.ok_or(FlatAudioError::InvalidWav("missing fmt chunk"))?;
+    let fmt = audio_format.ok_or_else(|| anyhow::anyhow!("missing fmt chunk"))?;
     if fmt != 1 {
-        return Err(FlatAudioError::UnsupportedCodec(fmt));
+        bail!("unsupported WAV format tag: {}", fmt);
     }
 
-    let channels = channels.ok_or(FlatAudioError::InvalidWav("missing channel count"))?;
-    let sample_rate = sample_rate.ok_or(FlatAudioError::InvalidWav("missing sample rate"))?;
+    let channels = channels.ok_or_else(|| anyhow::anyhow!("missing channel count"))?;
+    let sample_rate = sample_rate.ok_or_else(|| anyhow::anyhow!("missing sample rate"))?;
     let bits_per_sample =
-        bits_per_sample.ok_or(FlatAudioError::InvalidWav("missing bits per sample"))?;
-    let data = data_slice.ok_or(FlatAudioError::InvalidWav("missing data chunk"))?;
+        bits_per_sample.ok_or_else(|| anyhow::anyhow!("missing bits per sample"))?;
+    let data = data_slice.ok_or_else(|| anyhow::anyhow!("missing data chunk"))?;
 
     Ok(WavInfo {
         channels,
@@ -185,7 +181,7 @@ pub fn convert_wav_to_fls(bytes: &[u8], normalize_to_pcm16: bool) -> Result<Vec<
             let total_samples = (wav.data.len() / bytes_per_sample) as u32;
             (AudioCodecId::PCM16, wav.data.to_vec(), total_samples)
         }
-        other => return Err(FlatAudioError::UnsupportedCodec(other)),
+        other => bail!("unsupported WAV bit depth: {}", other),
     };
 
     let mut builder = FlatAudioBuilder::new(codec_id, wav.channels, wav.sample_rate);
@@ -198,5 +194,7 @@ pub fn convert_wav_to_fls(bytes: &[u8], normalize_to_pcm16: bool) -> Result<Vec<
     // Single monolithic packet for linear PCM Direct-to-Mixer playback
     builder.add_packet(total_samples, payload);
 
-    builder.build()
+    builder
+        .build()
+        .map_err(|e| anyhow::anyhow!("FlatAudio build error: {:?}", e))
 }

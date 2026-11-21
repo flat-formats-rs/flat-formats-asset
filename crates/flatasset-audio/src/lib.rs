@@ -28,10 +28,6 @@ pub use reader::FlatAudioView;
 
 #[cfg(feature = "std")]
 pub mod builder;
-#[cfg(feature = "std")]
-pub mod wav;
 
 #[cfg(feature = "std")]
 pub use builder::FlatAudioBuilder;
-#[cfg(feature = "std")]
-pub use wav::{convert_wav_to_fls, parse_wav, WavInfo};

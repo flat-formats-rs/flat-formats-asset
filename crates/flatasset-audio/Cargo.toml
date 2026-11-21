@@ -22,3 +22,7 @@ criterion = { workspace = true }
 [features]
 default = ["std"]
 std = ["zerocopy/std"]
+
+[[bench]]
+name = "audio_decode_bench"
+harness = false
