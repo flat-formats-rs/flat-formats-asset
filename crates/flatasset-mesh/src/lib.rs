@@ -7,6 +7,8 @@
 
 #![no_std]
 
+extern crate alloc;
+
 #[cfg(feature = "std")]
 extern crate std;
 
@@ -17,9 +19,23 @@ pub mod meshlet;
 pub mod reader;
 pub mod vertex;
 
+#[cfg(feature = "std")]
+pub mod builder;
+#[cfg(feature = "std")]
+pub mod clusterizer;
+#[cfg(feature = "std")]
+pub mod mdl;
+
 pub use error::{FlatMeshError, Result};
 pub use header::{FlatMeshHeader, FormatSignature};
 pub use lump::{FlatMeshLumpEntry, LumpId, LUMP_FLAG_REQUIRED};
 pub use meshlet::{FlatDrawIndexedIndirect, FlatMeshletDesc};
 pub use reader::FlatMeshView;
 pub use vertex::{FlatAttributeVertex, FlatPackedNormal, FlatPositionVertex, FlatSkinVertex};
+
+#[cfg(feature = "std")]
+pub use builder::FlatMeshBuilder;
+#[cfg(feature = "std")]
+pub use clusterizer::clusterize_triangles;
+#[cfg(feature = "std")]
+pub use mdl::{MdlBone, MdlModelData, MdlTexture, StudioMdlParser};

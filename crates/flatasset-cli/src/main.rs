@@ -84,6 +84,23 @@ enum Commands {
         #[arg(long)]
         keep_pcm8: bool,
     },
+    /// Converts a GoldSrc StudioMDL (.mdl) file into a FlatMesh (.flm) container
+    ConvertMdl {
+        /// Path to the input .mdl file
+        mdl: PathBuf,
+        /// Output .flm file path (or .flb when bundled)
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Extract textures as Direct-to-GPU DMA .flt files in the output directory
+        #[arg(long)]
+        extract_textures: bool,
+        /// Package .flm geometry and .flt textures into a single .flb bundle
+        #[arg(long)]
+        bundle: bool,
+        /// Compress bundle entries with Zstd (only valid with --bundle)
+        #[arg(long)]
+        compress: bool,
+    },
     /// Microbenchmark for zero-copy inspection across assets
     BenchIdentify {
         /// Path to asset file
@@ -589,6 +606,130 @@ fn main() -> Result<()> {
                 output,
                 fls_bytes.len()
             );
+        }
+        Commands::ConvertMdl {
+            mdl,
+            output,
+            extract_textures,
+            bundle,
+            compress,
+        } => {
+            let mdl_bytes = std::fs::read(&mdl)
+                .with_context(|| format!("Failed to read MDL file {:?}", mdl))?;
+
+            // Check if external texture file exists (<name>T.mdl)
+            let external_t_path = {
+                let stem = mdl
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let parent = mdl.parent().unwrap_or_else(|| std::path::Path::new(""));
+                parent.join(format!("{}T.mdl", stem))
+            };
+            let external_bytes = if external_t_path.exists() {
+                Some(std::fs::read(&external_t_path).with_context(|| {
+                    format!("Failed to read external texture file {:?}", external_t_path)
+                })?)
+            } else {
+                None
+            };
+
+            let parser = flatasset_mesh::StudioMdlParser::new(&mdl_bytes)
+                .with_context(|| format!("Failed to initialize StudioMdlParser for {:?}", mdl))?;
+
+            let model_data = parser
+                .parse(external_bytes.as_deref())
+                .with_context(|| format!("Failed to parse StudioMDL geometry for {:?}", mdl))?;
+
+            let flm_bytes = model_data
+                .build_flatmesh()
+                .with_context(|| format!("Failed to construct FlatMesh container for {:?}", mdl))?;
+
+            if let Some(parent) = output.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+
+            // Convert textures to FlatTexture (.flt) if requested or bundling
+            let mut encoded_textures: Vec<(String, Vec<u8>)> = Vec::new();
+            if extract_textures || bundle {
+                for tex in &model_data.textures {
+                    let clean_name = tex.name.trim_end_matches(".bmp").trim_end_matches(".BMP");
+                    let (bc1_bytes, row_pitch, rows) = flatasset_texture::encode_rgba_to_bc1_dma(
+                        tex.width,
+                        tex.height,
+                        &tex.rgba_data,
+                    );
+
+                    let mut tex_builder = flatasset_texture::FlatTextureBuilder::new_2d(
+                        tex.width as u16,
+                        tex.height as u16,
+                        flatasset_texture::VkFormat::Bc1RgbUnormBlock,
+                    );
+                    tex_builder.add_mip(flatasset_texture::MipInput {
+                        width: tex.width,
+                        height: tex.height,
+                        dma_bytes: bc1_bytes,
+                        aligned_row_pitch: row_pitch,
+                        rows_per_image: rows,
+                    });
+                    let flt_bytes = tex_builder
+                        .build()
+                        .with_context(|| format!("Failed to build FlatTexture for {}", tex.name))?;
+
+                    encoded_textures.push((clean_name.to_string(), flt_bytes));
+                }
+            }
+
+            if bundle {
+                let mut bundle_builder = FlatBundleBuilder::new();
+                // Add FlatMesh item
+                bundle_builder.add_asset(0x4D544C46, &flm_bytes, compress);
+
+                // Add FlatTexture items
+                for (_name, flt_data) in encoded_textures {
+                    bundle_builder.add_asset(0x54544C46, &flt_data, compress);
+                }
+
+                let bundle_bytes = bundle_builder.build();
+
+                std::fs::write(&output, &bundle_bytes)
+                    .with_context(|| format!("Failed to write bundled package to {:?}", output))?;
+
+                println!(
+                    "Successfully converted and bundled {:?} -> {:?} ({} bytes, {} assets)!",
+                    mdl,
+                    output,
+                    bundle_bytes.len(),
+                    model_data.textures.len() + 1
+                );
+            } else {
+                std::fs::write(&output, &flm_bytes)
+                    .with_context(|| format!("Failed to write FlatMesh to {:?}", output))?;
+
+                println!(
+                    "Successfully converted {:?} -> {:?} ({} bytes, {} verts, {} tris, {} bones)!",
+                    mdl,
+                    output,
+                    flm_bytes.len(),
+                    model_data.positions.len(),
+                    model_data.indices.len() / 3,
+                    model_data.bones.len()
+                );
+
+                if extract_textures {
+                    let out_dir = output.parent().unwrap_or_else(|| std::path::Path::new(""));
+                    for (name, flt_data) in encoded_textures {
+                        let tex_file = out_dir.join(format!("{}.flt", name));
+                        std::fs::write(&tex_file, &flt_data)
+                            .with_context(|| format!("Failed to write texture {:?}", tex_file))?;
+                        println!(
+                            "  Extracted texture: {:?} ({} bytes)",
+                            tex_file,
+                            flt_data.len()
+                        );
+                    }
+                }
+            }
         }
         Commands::BenchIdentify { file, iterations } => {
             let data = std::fs::read(&file)?;
