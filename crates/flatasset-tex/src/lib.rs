@@ -8,9 +8,13 @@
 
 #![no_std]
 
+extern crate alloc;
+
 #[cfg(feature = "std")]
 extern crate std;
 
+pub mod bc1;
+pub mod builder;
 pub mod error;
 pub mod format;
 pub mod header;
@@ -18,6 +22,8 @@ pub mod mip;
 pub mod reader;
 pub mod streaming;
 
+pub use bc1::{encode_bc1_block, encode_rgba_to_bc1_dma};
+pub use builder::{FlatTexBuilder, MipInput};
 pub use error::{FlatTexError, Result};
 pub use format::VkFormat;
 pub use header::{FlatTexHeader, FormatSignature};
