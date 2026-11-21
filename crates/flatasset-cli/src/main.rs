@@ -94,6 +94,27 @@ enum Commands {
     },
 }
 
+fn expand_input_paths(inputs: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
+    let mut expanded = Vec::new();
+    for p in inputs {
+        let path_str = p.to_string_lossy();
+        if let Some(list_rel) = path_str.strip_prefix('@') {
+            let list_path = PathBuf::from(list_rel);
+            let content = std::fs::read_to_string(&list_path)
+                .with_context(|| format!("Failed to read response file {:?}", list_path))?;
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                    expanded.push(PathBuf::from(trimmed));
+                }
+            }
+        } else {
+            expanded.push(p);
+        }
+    }
+    Ok(expanded)
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -140,6 +161,7 @@ fn main() -> Result<()> {
                     0x00574C46 => "FlatWorld",
                     0x00444C46 => "FlatDemo ",
                     0x42544C46 => "FlatBundle",
+                    0x53544C46 => "FlatAudio ",
                     _ => "Unknown   ",
                 };
                 println!(
@@ -164,6 +186,7 @@ fn main() -> Result<()> {
             inputs,
             compress,
         } => {
+            let inputs = expand_input_paths(inputs)?;
             let mut builder = FlatBundleBuilder::new();
             println!(
                 "Bundling {} assets into {:?} (compressed: {})...",
@@ -195,6 +218,7 @@ fn main() -> Result<()> {
             pool_output,
             out_dir,
         } => {
+            let inputs = expand_input_paths(inputs)?;
             println!("=== Content-Addressable Storage (CAS) Deduplicator ===");
             println!("Scanning {} input bundle(s)...", inputs.len());
 

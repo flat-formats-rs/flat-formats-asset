@@ -47,6 +47,10 @@ pub fn parse_wav(bytes: &[u8]) -> Result<WavInfo<'_>> {
         let chunk_data_end = chunk_data_start + chunk_size;
 
         if chunk_data_end > bytes.len() {
+            // If essential fmt and data chunks are already parsed, malformed/truncated trailing tags (e.g. corrupt LIST/INFO) can be safely ignored
+            if data_slice.is_some() && audio_format.is_some() {
+                break;
+            }
             return Err(FlatAudioError::InvalidWav(
                 "chunk bounds exceed file length",
             ));
