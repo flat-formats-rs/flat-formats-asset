@@ -11,6 +11,7 @@ extern crate alloc;
 
 pub mod bvh8;
 pub mod header;
+pub mod lightmap;
 pub mod meshlet;
 pub mod pvs;
 pub mod qbvh;
@@ -22,6 +23,11 @@ pub use bvh8::{ray_octant, Bvh8Node, BVH8_EMPTY_CHILD, BVH8_LEAF_MASK, OCTANT_OR
 pub use header::{
     CompressionType, FlatWorldHeader, FlatWorldLumpDesc, LumpType, FLATWORLD_MAGIC,
     FLATWORLD_VERSION,
+};
+pub use lightmap::{
+    FaceLightmapDesc, FaceLightmapInput, GammaTable, LightmapAtlasHeader, LightmapAtlasView,
+    LightmapError, LightmapFormat, LightmapPacker, DEFAULT_ATLAS_WIDTH, DEFAULT_LIGHTGAMMA,
+    DEFAULT_LIGHTSCALE, GPU_ROW_PITCH_ALIGNMENT, LIGHTMAP_MAGIC, LIGHTMAP_VERSION,
 };
 pub use meshlet::FlatWorldMeshlet;
 pub use pvs::{

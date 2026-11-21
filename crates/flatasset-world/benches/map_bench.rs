@@ -318,6 +318,32 @@ fn bench_real_map(c: &mut Criterion) {
         b.iter(|| black_box(FlatWorldView::new(black_box(&flw_bytes)).unwrap()));
     });
 
+    if let Ok(flw_light_bytes) = fs::read("D:/Repo/flatworld-rs/de_inferno_with_light.flw") {
+        c.bench_function("inferno_flw_with_lightmaps_mount_zero_alloc", |b| {
+            b.iter(|| black_box(FlatWorldView::new(black_box(&flw_light_bytes)).unwrap()));
+        });
+        if let Ok(flw_light_view) = FlatWorldView::new(&flw_light_bytes) {
+            c.bench_function("inferno_flw_lightmap_view_mount", |b| {
+                b.iter(|| black_box(flw_light_view.lightmap_view().unwrap().unwrap()));
+            });
+            if let Ok(Some(lm_view)) = flw_light_view.lightmap_view() {
+                let s_vec = [1.0, 0.0, 0.0, 0.0];
+                let t_vec = [0.0, 1.0, 0.0, 0.0];
+                let pos = [0.0, 0.0, 100.0];
+                c.bench_function("inferno_flw_lightmap_uv_lookup", |b| {
+                    b.iter(|| {
+                        black_box(lm_view.compute_luxel_uv(
+                            black_box(0),
+                            black_box(pos),
+                            black_box(s_vec),
+                            black_box(t_vec),
+                        ))
+                    });
+                });
+            }
+        }
+    }
+
     c.bench_function("inferno_bsp_mount_table_only", |b| {
         b.iter(|| black_box(bsp_mount_table_only(black_box(&bsp_bytes))));
     });

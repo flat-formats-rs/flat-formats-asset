@@ -4,6 +4,7 @@ use zerocopy::FromBytes;
 
 use crate::{
     header::{FlatWorldHeader, FlatWorldLumpDesc, LumpType, FLATWORLD_MAGIC, FLATWORLD_VERSION},
+    lightmap::LightmapAtlasView,
     meshlet::FlatWorldMeshlet,
     pvs::{
         ChunkedPvsHeader, ChunkedPvsView, PvsView, WordSparsePvsHeader, WordSparsePvsView, WorldPvs,
@@ -43,6 +44,8 @@ pub enum FlatWorldError {
     UnsupportedCompression(u32),
     #[error("Invalid UTF-8 payload in entity lump")]
     InvalidUtf8,
+    #[error("Invalid lightmap lump: {0}")]
+    InvalidLightmap(#[from] crate::lightmap::LightmapError),
 }
 
 /// Zero-copy, zero-allocation memory-mapped viewer of a FlatWorld container.
@@ -356,5 +359,21 @@ impl<'a> FlatWorldView<'a> {
         }
         let bytes = self.lump_bytes(LumpType::EntityGraph)?;
         core::str::from_utf8(bytes).map_err(|_| FlatWorldError::InvalidUtf8)
+    }
+
+    /// Returns the zero-copy Lightmap Atlas viewer (Lump 6), if present.
+    pub fn lightmap_view(&self) -> Result<Option<LightmapAtlasView<'a>>, FlatWorldError> {
+        let Some(lump) = self.find_lump(LumpType::Lightmaps) else {
+            return Ok(None);
+        };
+        if lump.compression_type != 0 {
+            return Err(FlatWorldError::LumpCompressed(
+                LumpType::Lightmaps,
+                lump.compression_type,
+            ));
+        }
+        let bytes = self.lump_bytes(LumpType::Lightmaps)?;
+        let view = LightmapAtlasView::new(bytes)?;
+        Ok(Some(view))
     }
 }
