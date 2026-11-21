@@ -5,7 +5,9 @@ use zerocopy::FromBytes;
 use crate::{
     header::{FlatWorldHeader, FlatWorldLumpDesc, LumpType, FLATWORLD_MAGIC, FLATWORLD_VERSION},
     meshlet::FlatWorldMeshlet,
-    pvs::PvsView,
+    pvs::{
+        ChunkedPvsHeader, ChunkedPvsView, PvsView, WordSparsePvsHeader, WordSparsePvsView, WorldPvs,
+    },
     qbvh::QBvh4Node,
 };
 
@@ -33,6 +35,8 @@ pub enum FlatWorldError {
     },
     #[error("Lump {0:?} was not found in container")]
     LumpNotFound(LumpType),
+    #[error("Lump {0:?} is compressed (type {1}); use decompressed_lump_bytes")]
+    LumpCompressed(LumpType, u32),
     #[error("Failed to decompress lump payload")]
     DecompressionFailed,
     #[error("Unsupported compression type: {0}")]
@@ -81,7 +85,7 @@ impl<'a> FlatWorldView<'a> {
                 actual: bytes.len(),
             })?;
 
-        // Validate each lump offset and bounds
+        // Validate each lump offset, bounds, and uncompressed stride consistency
         for lump in lumps_ref {
             let end_offset = lump.file_offset.checked_add(lump.compressed_size).ok_or(
                 FlatWorldError::LumpOutOfBounds {
@@ -99,6 +103,34 @@ impl<'a> FlatWorldView<'a> {
                     size: lump.compressed_size,
                     total: bytes.len(),
                 });
+            }
+
+            // Invariant: for uncompressed structural lumps, validate expected element stride against size
+            if lump.compression_type == 0 {
+                let expected_stride = match lump.lump_type {
+                    x if x == LumpType::QBvh4 as u32 => core::mem::size_of::<QBvh4Node>(),
+                    x if x == LumpType::Meshlets as u32 => core::mem::size_of::<FlatWorldMeshlet>(),
+                    _ => lump.element_stride as usize,
+                };
+                if lump.element_count > 0 && expected_stride > 0 {
+                    let required = lump
+                        .element_count
+                        .checked_mul(expected_stride as u64)
+                        .ok_or(FlatWorldError::LumpOutOfBounds {
+                            lump_id: lump.lump_type,
+                            offset: lump.file_offset,
+                            size: lump.compressed_size,
+                            total: bytes.len(),
+                        })?;
+                    if required > lump.compressed_size {
+                        return Err(FlatWorldError::LumpOutOfBounds {
+                            lump_id: lump.lump_type,
+                            offset: lump.file_offset,
+                            size: lump.compressed_size,
+                            total: bytes.len(),
+                        });
+                    }
+                }
             }
         }
 
@@ -134,9 +166,16 @@ impl<'a> FlatWorldView<'a> {
         let lump = self
             .find_lump(lump_type)
             .ok_or(FlatWorldError::LumpNotFound(lump_type))?;
-        let start = lump.file_offset as usize;
-        let end = start + lump.compressed_size as usize;
-        Ok(&self.raw_bytes[start..end])
+        let out_of_bounds = || FlatWorldError::LumpOutOfBounds {
+            lump_id: lump.lump_type,
+            offset: lump.file_offset,
+            size: lump.compressed_size,
+            total: self.raw_bytes.len(),
+        };
+        let start = usize::try_from(lump.file_offset).map_err(|_| out_of_bounds())?;
+        let size = usize::try_from(lump.compressed_size).map_err(|_| out_of_bounds())?;
+        let end = start.checked_add(size).ok_or_else(out_of_bounds)?;
+        self.raw_bytes.get(start..end).ok_or_else(out_of_bounds)
     }
 
     /// Returns decompressed lump payload (zero-copy borrowed if uncompressed, or owned buffer if compressed).
@@ -163,9 +202,29 @@ impl<'a> FlatWorldView<'a> {
 
     /// Returns typed slice of Q-BVH4 collision nodes.
     pub fn qbvh_nodes(&self) -> Result<&'a [QBvh4Node], FlatWorldError> {
+        let lump = self
+            .find_lump(LumpType::QBvh4)
+            .ok_or(FlatWorldError::LumpNotFound(LumpType::QBvh4))?;
+        if lump.compression_type != 0 {
+            return Err(FlatWorldError::LumpCompressed(
+                LumpType::QBvh4,
+                lump.compression_type,
+            ));
+        }
         let bytes = self.lump_bytes(LumpType::QBvh4)?;
-        let lump = self.find_lump(LumpType::QBvh4).unwrap();
         let count = lump.element_count as usize;
+        let expected_size = count.checked_mul(core::mem::size_of::<QBvh4Node>()).ok_or(
+            FlatWorldError::BufferTooSmall {
+                expected: usize::MAX,
+                actual: bytes.len(),
+            },
+        )?;
+        if bytes.len() < expected_size {
+            return Err(FlatWorldError::BufferTooSmall {
+                expected: expected_size,
+                actual: bytes.len(),
+            });
+        }
         let (nodes, _) = <[QBvh4Node]>::ref_from_prefix_with_elems(bytes, count).map_err(|_| {
             FlatWorldError::MisalignedLump {
                 lump_id: lump.lump_type,
@@ -178,9 +237,29 @@ impl<'a> FlatWorldView<'a> {
 
     /// Returns typed slice of static world meshlets.
     pub fn meshlets(&self) -> Result<&'a [FlatWorldMeshlet], FlatWorldError> {
+        let lump = self
+            .find_lump(LumpType::Meshlets)
+            .ok_or(FlatWorldError::LumpNotFound(LumpType::Meshlets))?;
+        if lump.compression_type != 0 {
+            return Err(FlatWorldError::LumpCompressed(
+                LumpType::Meshlets,
+                lump.compression_type,
+            ));
+        }
         let bytes = self.lump_bytes(LumpType::Meshlets)?;
-        let lump = self.find_lump(LumpType::Meshlets).unwrap();
         let count = lump.element_count as usize;
+        let expected_size = count
+            .checked_mul(core::mem::size_of::<FlatWorldMeshlet>())
+            .ok_or(FlatWorldError::BufferTooSmall {
+                expected: usize::MAX,
+                actual: bytes.len(),
+            })?;
+        if bytes.len() < expected_size {
+            return Err(FlatWorldError::BufferTooSmall {
+                expected: expected_size,
+                actual: bytes.len(),
+            });
+        }
         let (meshlets, _) = <[FlatWorldMeshlet]>::ref_from_prefix_with_elems(bytes, count)
             .map_err(|_| FlatWorldError::MisalignedLump {
                 lump_id: lump.lump_type,
@@ -192,8 +271,16 @@ impl<'a> FlatWorldView<'a> {
 
     /// Returns a Succinct PVS viewer.
     pub fn pvs_view(&self) -> Result<PvsView<'a>, FlatWorldError> {
+        let lump = self
+            .find_lump(LumpType::VisibilityBitmask)
+            .ok_or(FlatWorldError::LumpNotFound(LumpType::VisibilityBitmask))?;
+        if lump.compression_type != 0 {
+            return Err(FlatWorldError::LumpCompressed(
+                LumpType::VisibilityBitmask,
+                lump.compression_type,
+            ));
+        }
         let bytes = self.lump_bytes(LumpType::VisibilityBitmask)?;
-        let lump = self.find_lump(LumpType::VisibilityBitmask).unwrap();
         let cluster_count = lump.element_count as usize;
         PvsView::new(cluster_count, bytes).ok_or(FlatWorldError::BufferTooSmall {
             expected: cluster_count * cluster_count.div_ceil(8),
@@ -201,8 +288,72 @@ impl<'a> FlatWorldView<'a> {
         })
     }
 
+    /// Returns a Chunked PVS viewer (cache-line chunked format).
+    pub fn chunked_pvs_view(&self) -> Result<ChunkedPvsView<'a>, FlatWorldError> {
+        let lump = self
+            .find_lump(LumpType::VisibilityBitmask)
+            .ok_or(FlatWorldError::LumpNotFound(LumpType::VisibilityBitmask))?;
+        if lump.compression_type != 0 {
+            return Err(FlatWorldError::LumpCompressed(
+                LumpType::VisibilityBitmask,
+                lump.compression_type,
+            ));
+        }
+        let bytes = self.lump_bytes(LumpType::VisibilityBitmask)?;
+        ChunkedPvsView::new(bytes).ok_or(FlatWorldError::BufferTooSmall {
+            expected: core::mem::size_of::<ChunkedPvsHeader>(),
+            actual: bytes.len(),
+        })
+    }
+
+    /// Returns a 64-bit Word-Level Sparse PVS viewer.
+    pub fn word_sparse_pvs_view(&self) -> Result<WordSparsePvsView<'a>, FlatWorldError> {
+        let lump = self
+            .find_lump(LumpType::VisibilityBitmask)
+            .ok_or(FlatWorldError::LumpNotFound(LumpType::VisibilityBitmask))?;
+        if lump.compression_type != 0 {
+            return Err(FlatWorldError::LumpCompressed(
+                LumpType::VisibilityBitmask,
+                lump.compression_type,
+            ));
+        }
+        let bytes = self.lump_bytes(LumpType::VisibilityBitmask)?;
+        WordSparsePvsView::new(bytes).ok_or(FlatWorldError::BufferTooSmall {
+            expected: core::mem::size_of::<WordSparsePvsHeader>(),
+            actual: bytes.len(),
+        })
+    }
+
+    /// Returns a unified WorldPvs viewer (auto-detecting Dense or Chunked format).
+    pub fn world_pvs(&self) -> Result<WorldPvs<'a>, FlatWorldError> {
+        let lump = self
+            .find_lump(LumpType::VisibilityBitmask)
+            .ok_or(FlatWorldError::LumpNotFound(LumpType::VisibilityBitmask))?;
+        if lump.compression_type != 0 {
+            return Err(FlatWorldError::LumpCompressed(
+                LumpType::VisibilityBitmask,
+                lump.compression_type,
+            ));
+        }
+        let bytes = self.lump_bytes(LumpType::VisibilityBitmask)?;
+        let cluster_count = lump.element_count as usize;
+        WorldPvs::parse(cluster_count, bytes).ok_or(FlatWorldError::BufferTooSmall {
+            expected: core::mem::size_of::<ChunkedPvsHeader>(),
+            actual: bytes.len(),
+        })
+    }
+
     /// Returns the entity scene graph as a UTF-8 KDL string slice.
     pub fn entity_kdl(&self) -> Result<&'a str, FlatWorldError> {
+        let lump = self
+            .find_lump(LumpType::EntityGraph)
+            .ok_or(FlatWorldError::LumpNotFound(LumpType::EntityGraph))?;
+        if lump.compression_type != 0 {
+            return Err(FlatWorldError::LumpCompressed(
+                LumpType::EntityGraph,
+                lump.compression_type,
+            ));
+        }
         let bytes = self.lump_bytes(LumpType::EntityGraph)?;
         core::str::from_utf8(bytes).map_err(|_| FlatWorldError::InvalidUtf8)
     }

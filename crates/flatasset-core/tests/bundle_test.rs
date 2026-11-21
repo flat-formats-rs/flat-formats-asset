@@ -62,3 +62,25 @@ fn test_flatbundle_build_and_mount() {
     // Out of bounds
     assert!(view.get_item(3).is_err());
 }
+
+#[test]
+fn test_flatbundle_rejects_out_of_bounds_item_payload() {
+    use flatasset_core::bundle::{FlatBundleHeader, FlatBundleItemDesc};
+    use zerocopy::FromBytes;
+
+    let mut builder = FlatBundleBuilder::new();
+    builder.add_asset(1, b"abcd", false);
+    let mut bytes = builder.build();
+    let index_offset = {
+        let (header, _) = FlatBundleHeader::ref_from_prefix(&bytes).unwrap();
+        header.index_offset as usize
+    };
+    {
+        let (item, _) = <FlatBundleItemDesc>::mut_from_prefix(&mut bytes[index_offset..]).unwrap();
+        item.file_offset = u64::MAX;
+    }
+    assert!(matches!(
+        FlatBundleView::new(&bytes),
+        Err(flatasset_core::bundle::FlatBundleError::ItemRangeOutOfBounds { .. })
+    ));
+}

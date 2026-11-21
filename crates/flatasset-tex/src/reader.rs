@@ -49,7 +49,9 @@ impl<'a> FlatTexView<'a> {
 
         // 4. Validate and slice Subresource Mip Directory
         let mip_table_start = header.mip_table_offset();
-        let mip_table_size = (header.mip_levels as usize) * core::mem::size_of::<FlatMipDesc>();
+        let mip_table_size = (header.mip_levels as usize)
+            .checked_mul(core::mem::size_of::<FlatMipDesc>())
+            .ok_or(FlatTexError::InvalidLayout)?;
         let mip_table_end =
             mip_table_start
                 .checked_add(mip_table_size)
@@ -92,11 +94,18 @@ impl<'a> FlatTexView<'a> {
                     limit: bytes.len(),
                 });
             }
-            if mip.aligned_row_pitch() % 256 != 0 {
+            let pitch = mip.aligned_row_pitch();
+            if mip.rows_per_image > 0 && pitch == 0 {
                 return Err(FlatTexError::InvalidRowPitch {
-                    pitch: mip.aligned_row_pitch(),
+                    pitch,
                     required_alignment: 256,
                 });
+            }
+            let min_bytes = (pitch as u64)
+                .checked_mul(mip.rows_per_image as u64)
+                .ok_or(FlatTexError::InvalidLayout)?;
+            if (mip.byte_size as u64) < min_bytes {
+                return Err(FlatTexError::InvalidLayout);
             }
         }
 

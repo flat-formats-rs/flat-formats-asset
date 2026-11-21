@@ -96,6 +96,30 @@ impl<'a> FlatMeshView<'a> {
                     limit: bytes.len(),
                 });
             }
+
+            // Invariant: element_count * expected_stride must not exceed uncompressed_size.
+            // Do NOT trust untrusted lump.element_stride alone for known structural streams!
+            let expected_stride = match lump.lump_id {
+                x if x == LumpId::PositionStream as u16 => {
+                    core::mem::size_of::<crate::vertex::FlatPositionVertex>()
+                }
+                x if x == LumpId::AttributeStream as u16 => {
+                    core::mem::size_of::<crate::vertex::FlatAttributeVertex>()
+                }
+                x if x == LumpId::IndexBuffer as u16 => core::mem::size_of::<u16>(),
+                x if x == LumpId::MeshletClusters as u16 => {
+                    core::mem::size_of::<crate::meshlet::FlatMeshletDesc>()
+                }
+                _ => lump.element_stride as usize,
+            };
+            if lump.element_count > 0 && expected_stride > 0 {
+                let required_span = (lump.element_count as u64)
+                    .checked_mul(expected_stride as u64)
+                    .ok_or(FlatMeshError::InvalidLayout)?;
+                if required_span > lump.uncompressed_size {
+                    return Err(FlatMeshError::InvalidLayout);
+                }
+            }
         }
 
         Ok(Self {
