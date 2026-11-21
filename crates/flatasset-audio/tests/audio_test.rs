@@ -41,3 +41,27 @@ fn test_flat_audio_builder_and_view_roundtrip() {
     assert_eq!(view.packet_bytes(2).unwrap(), &packet2[..]);
     assert!(view.packet_bytes(3).is_err());
 }
+
+#[test]
+fn test_flat_audio_pcm16_packet_view() {
+    let mut builder = FlatAudioBuilder::new(AudioCodecId::PCM16, 1, 44100);
+    // 4 samples of PCM16 = 8 bytes
+    let samples: [i16; 4] = [1000, -2000, 3000, -4000];
+    let mut raw_bytes = Vec::new();
+    for s in samples {
+        raw_bytes.extend_from_slice(&s.to_le_bytes());
+    }
+    builder.add_packet(4, raw_bytes);
+
+    let bytes = builder.build().expect("build pcm16 audio");
+
+    let mut aligned = Vec::with_capacity(bytes.len() + 8);
+    let offset = (8 - (aligned.as_ptr() as usize % 8)) % 8;
+    aligned.resize(offset, 0);
+    aligned.extend_from_slice(&bytes);
+    let aligned_slice = &aligned[offset..offset + bytes.len()];
+
+    let view = FlatAudioView::new(aligned_slice).expect("mount view");
+    let pcm = view.packet_pcm16(0).expect("read zero-copy pcm16");
+    assert_eq!(pcm, &samples[..]);
+}

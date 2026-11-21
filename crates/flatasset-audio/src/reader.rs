@@ -170,4 +170,20 @@ impl<'a> FlatAudioView<'a> {
         let end = start + p.byte_size as usize;
         Ok(&self.bytes[start..end])
     }
+
+    /// Accesses the raw PCM16 samples of an audio packet with zero-copy.
+    ///
+    /// Available only when container format is `AudioCodecId::PCM16`.
+    pub fn packet_pcm16(&self, index: usize) -> Result<&'a [i16]> {
+        if self.header.codec_id != crate::codec::AudioCodecId::PCM16 {
+            return Err(FlatAudioError::UnsupportedCodec(self.header.codec_id.0));
+        }
+        let raw = self.packet_bytes(index)?;
+        let (samples_ref, _) = Ref::<&'a [u8], [i16]>::from_prefix_with_elems(
+            raw,
+            raw.len() / core::mem::size_of::<i16>(),
+        )
+        .map_err(|_| FlatAudioError::InvalidLayout)?;
+        Ok(Ref::into_ref(samples_ref))
+    }
 }
