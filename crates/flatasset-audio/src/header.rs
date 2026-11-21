@@ -11,9 +11,9 @@ pub const FLATAUDIO_VERSION: u32 = 1;
 /// Exact 32-byte header for FlatAudio (`.fls`).
 ///
 /// Fits into half of a 64-byte L1 CPU cache line.
-/// Zero padding holes with natural field alignment.
+/// Zero padding holes with natural field alignment (4 bytes).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, FromBytes, Immutable, IntoBytes, KnownLayout)]
-#[repr(C, align(32))]
+#[repr(C)]
 pub struct FlatAudioHeader {
     /// 4 bytes (offset 0..4): Magic `FLTS`
     pub magic: u32,
@@ -38,7 +38,7 @@ pub struct FlatAudioHeader {
 }
 
 const _: () = assert!(core::mem::size_of::<FlatAudioHeader>() == 32);
-const _: () = assert!(core::mem::align_of::<FlatAudioHeader>() == 32);
+const _: () = assert!(core::mem::align_of::<FlatAudioHeader>() == 4);
 
 impl FlatAudioHeader {
     pub const FLAG_LOOPING: u8 = 1 << 0;
@@ -58,10 +58,11 @@ impl FlatAudioHeader {
 /// Exact 16-byte packet index descriptor for $O(1)$ random access.
 ///
 /// 4 descriptors fit into one 64-byte L1 cache line.
+/// Natural field alignment is 8 bytes due to `u64`.
 #[derive(
     Copy, Clone, Debug, Default, PartialEq, Eq, FromBytes, Immutable, IntoBytes, KnownLayout,
 )]
-#[repr(C, align(16))]
+#[repr(C)]
 pub struct FlatAudioPacketDesc {
     /// 8 bytes: Absolute byte offset of the encoded packet from container start
     pub byte_offset: u64,
@@ -72,4 +73,4 @@ pub struct FlatAudioPacketDesc {
 }
 
 const _: () = assert!(core::mem::size_of::<FlatAudioPacketDesc>() == 16);
-const _: () = assert!(core::mem::align_of::<FlatAudioPacketDesc>() == 16);
+const _: () = assert!(core::mem::align_of::<FlatAudioPacketDesc>() == 8);

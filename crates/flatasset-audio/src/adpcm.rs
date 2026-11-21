@@ -33,29 +33,26 @@ impl AdpcmState {
     }
 
     /// Decodes a single 4-bit nibble into a 16-bit linear PCM sample.
+    ///
+    /// Implemented with 100% branchless ALU and bitmask operations for maximum IPC.
     #[inline(always)]
     pub fn decode_nibble(&mut self, nibble: u8) -> i16 {
-        let step = STEP_SIZE_TABLE[self.step_index as usize] as i32;
+        let step_idx = (self.step_index.clamp(0, 88) as usize).min(88);
+        let step = STEP_SIZE_TABLE[step_idx] as i32;
 
-        // Difference equation: diff = step * (nibble + 0.5) / 4
-        // Decomposed into integer shifts and adds
+        // Branchless difference equation: diff = step * (nibble + 0.5) / 4
+        // Decomposed into integer shifts and bitmask selections
+        let n = nibble as i32;
         let mut diff = step >> 3;
-        if (nibble & 0x01) != 0 {
-            diff += step >> 2;
-        }
-        if (nibble & 0x02) != 0 {
-            diff += step >> 1;
-        }
-        if (nibble & 0x04) != 0 {
-            diff += step;
-        }
+        diff += step & (-((n >> 2) & 1));
+        diff += (step >> 1) & (-((n >> 1) & 1));
+        diff += (step >> 2) & (-(n & 1));
 
-        let mut sample = self.predicted_sample as i32;
-        if (nibble & 0x08) != 0 {
-            sample -= diff;
-        } else {
-            sample += diff;
-        }
+        // Branchless sign application: if bit 3 is set, diff is negated
+        let sign_mask = -((n >> 3) & 1);
+        let diff_signed = (diff ^ sign_mask) - sign_mask;
+
+        let mut sample = (self.predicted_sample as i32) + diff_signed;
 
         // Clamp sample to 16-bit signed range [-32768, 32767]
         sample = sample.clamp(-32768, 32767);
@@ -71,7 +68,8 @@ impl AdpcmState {
     /// Encodes a 16-bit linear PCM sample into a 4-bit nibble.
     #[inline(always)]
     pub fn encode_sample(&mut self, sample: i16) -> u8 {
-        let step = STEP_SIZE_TABLE[self.step_index as usize] as i32;
+        let step_idx = (self.step_index.clamp(0, 88) as usize).min(88);
+        let step = STEP_SIZE_TABLE[step_idx] as i32;
         let mut diff = (sample as i32) - (self.predicted_sample as i32);
 
         let mut nibble = 0u8;
@@ -201,5 +199,22 @@ mod tests {
                 decoded[i]
             );
         }
+    }
+
+    #[test]
+    fn test_adpcm_corrupt_step_index_safety() {
+        // Untrusted / corrupted state must never panic on index lookup
+        let mut state = AdpcmState {
+            predicted_sample: 100,
+            step_index: 120, // out of bounds (> 88)
+        };
+        let s = state.decode_nibble(0x05);
+        assert!(s != 0);
+        assert!(state.step_index <= 88);
+
+        state.step_index = -50;
+        let s2 = state.decode_nibble(0x0E);
+        assert!(s2 != 0);
+        assert!(state.step_index >= 0 && state.step_index <= 88);
     }
 }

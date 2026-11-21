@@ -1,49 +1,71 @@
 # FlatAsset: Universal Zero-Alloc Binary Asset Ecosystem & Bundler
 
-[![CI](https://github.com/ulquiorracode/flatasset-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/ulquiorracode/flatasset-rs/actions/workflows/ci.yml)
-[![Crates.io](https://img.shields.io/badge/crates.io-flatasset-blue.svg)](https://crates.io/crates/flatasset)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/flat-formats-rs/flat-formats-asset/actions/workflows/ci.yml/badge.svg)](https://github.com/flat-formats-rs/flat-formats-asset/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Zero Alloc](https://img.shields.io/badge/allocations-0_heap-brightgreen.svg)](#performance-highlights)
+[![Rust Edition](https://img.shields.io/badge/Rust-2024-orange.svg)](Cargo.toml)
 
 **FlatAsset** is the umbrella ecosystem and multi-asset packaging standard designed for extreme performance, mechanical sympathy, and zero-allocation execution in modern game engines and simulations.
 
-It unifies the four specialized binary container standards:
-1. **FlatMesh (`.flm`)**: Skeletal geometry, meshlets, bone weight quantization, and animation tracks.
-2. **FlatTexture (`.flt`)**: GPU Direct-DMA BC1..BC7 / ASTC textures with 256-byte row-pitch pre-alignment.
-3. **FlatWorld (`.flw`)**: Map geometry, 4-way SIMD Q-BVH collision, and succinct bitmask PVS.
-4. **FlatDemo (`.fld`)**: Columnar deterministic replay streams with $O(1)$ arbitrary tick random seek.
-5. **FlatBundle (`.flb`)**: Heterogeneous multi-asset container with 64-byte alignment and BLAKE3 Merkle integrity.
+It unifies specialized binary container standards:
+
+1. **FlatWorld (`.flw`)**: Map geometry, 4-way SIMD Q-BVH collision, and succinct bitmask PVS.
+2. **FlatMesh (`.flm`)**: Skeletal geometry, meshlets, bone weight quantization, and animation tracks.
+3. **FlatTexture (`.flt`)**: GPU Direct-DMA BC1..BC7 / ASTC textures with 256-byte row-pitch pre-alignment.
+4. **FlatAudio (`.fls`)**: Zero-alloc low-latency audio, integer-only IMA-ADPCM 4:1 codec, and direct-to-mixer PCM16 streaming.
+5. **FlatDemo (`.fld`)**: Columnar deterministic replay streams with $O(1)$ arbitrary tick random seek.
+6. **FlatBundle (`.flb`)**: Heterogeneous multi-asset container with Content-Addressable Storage (CAS), Merkle BLAKE3 deduplication, and zero-copy slicing.
 
 ---
 
 ## Performance Highlights
 
-| Metric | Result | Benchmark Details |
-| :--- | :--- | :--- |
-| **Asset Identification** | **0.03 ns** | Branchless magic identification via 32-bit LE word |
-| **Bundle Mount Time** | **< 2.0 ns** | Direct `mmap` zero-copy header validation |
-| **All-in-One Package** | **25.9 KB** | Complete bundle containing mesh + texture + full map + demo |
-| **Integrity Verification** | **Hardware-accelerated** | BLAKE3 Merkle root checksum across bundled lumps |
+Comparative benchmarks executed in [GoldHub](https://github.com/goldhub-rs/goldhub) on production Counter-Strike 1.6 game assets (`de_dust2`, `v_ak47`, `Birds1.wav`):
+
+| Asset Category | Legacy GoldSrc Asset | FlatFormat Container | Legacy Latency | FlatFormat Latency | Speedup Factor | Memory Allocations |
+| --- | --- | --- | --- | --- | --- | --- |
+| **World Map** (`de_dust2`) | Legacy BSP30 (15 lumps) | **FlatWorld (`.flw`)** | 166.00 µs | **7.40 ns** | **22,432x faster** | **0 heap allocs** |
+| **Skeletal Model** (`v_ak47`) | StudioMDL Binary | **FlatMesh (`.flm`)** | 995.00 µs | **12.80 ns** | **77,734x faster** | **0 heap allocs** |
+| **Audio Sound** (`Birds1.wav`) | RIFF WAVE PCM | **FlatAudio (`.fls`)** | 1.24 µs | **3.17 ns** | **391x faster** | **0 heap allocs** |
+| **Shared CAS Pool** | Unshared duplicate files | **FlatCasPool (`.flb`)** | N/A (RAM bloat) | **Zero-Copy Slice** | **Single copy in RAM** | **Deduplicated** |
+
+---
+
+## Workspace Layout
+
+| Crate | Container | Description |
+| --- | --- | --- |
+| [`flatasset-world`](crates/flatasset-world) | `.flw` | Map geometry, SIMD 4-way Q-BVH, lightmaps, and cluster PVS. |
+| [`flatasset-mesh`](crates/flatasset-mesh) | `.flm` | Skeletal meshes, meshlets, bone transforms, and vertex streams. |
+| [`flatasset-texture`](crates/flatasset-texture) | `.flt` | GPU textures, BC1-BC7 mip levels, and DMA pitch alignments. |
+| [`flatasset-audio`](crates/flatasset-audio) | `.fls` | Integer IMA-ADPCM codec, raw PCM16 streaming, and 3D audio flags. |
+| [`flatasset-core`](crates/flatasset-core) | `.flb` | Multi-asset bundle container, Content-Addressable Storage, and Merkle tree. |
+| [`flatasset-cli`](crates/flatasset-cli) | CLI | `fla` command-line tool for bundling, inspection, and compilation. |
 
 ---
 
 ## Installation & CLI Usage
 
 ### Install CLI Tooling (`fla`)
+
 ```bash
-cargo install --path cli/flatasset-cli
+cargo install --path crates/flatasset-cli
 ```
 
 ### Inspect Asset Kind
+
 ```bash
 fla identify my_model.flm
 ```
 
 ### Bundle Multiple Assets into `.flb`
+
 ```bash
-fla bundle -o package.flb model.flm texture.flt map.flw demo.fld --compress
+fla bundle -o package.flb model.flm texture.flt map.flw sound.fls demo.fld --compress
 ```
 
 ### Inspect Bundle Contents
+
 ```bash
 fla inspect-bundle package.flb
 ```
@@ -52,4 +74,4 @@ fla inspect-bundle package.flb
 
 ## License
 
-Licensed under either of [Apache License, Version 2.0](LICENSE) or [MIT License](LICENSE) at your option.
+Licensed under the [MIT License](LICENSE).
