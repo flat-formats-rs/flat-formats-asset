@@ -9,6 +9,9 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::path::PathBuf;
 
+mod adapters;
+use adapters::mdl::StudioMdlParser;
+
 #[derive(Parser)]
 #[command(name = "fla")]
 #[command(about = "FlatAsset Universal Ecosystem CLI & Multi-Asset Bundler", long_about = None)]
@@ -634,7 +637,7 @@ fn main() -> Result<()> {
                 None
             };
 
-            let parser = flatasset_mesh::StudioMdlParser::new(&mdl_bytes)
+            let parser = StudioMdlParser::new(&mdl_bytes)
                 .with_context(|| format!("Failed to initialize StudioMdlParser for {:?}", mdl))?;
 
             let model_data = parser
