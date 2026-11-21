@@ -12,6 +12,7 @@ homepage.workspace = true
 flatasset-mesh = { workspace = true }
 flatasset-tex = { workspace = true }
 flatasset-world = { workspace = true }
+flatasset-audio = { workspace = true }
 flatdemo-core = { workspace = true }
 silicon-kit = { workspace = true }
 odd-int = { workspace = true }

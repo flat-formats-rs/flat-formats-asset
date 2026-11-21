@@ -1,0 +1,24 @@
+[package]
+name = "flatasset-audio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Zero-copy game audio container format (.fls) with open-world CodecId and seamless looping"
+readme = "README.md"
+keywords = ["audio", "opus", "pcm", "sound", "zero-copy"]
+categories = ["multimedia::audio", "data-structures", "no-std"]
+
+[dependencies]
+zerocopy = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["zerocopy/std"]

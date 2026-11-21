@@ -4,6 +4,7 @@ members = [
     "crates/flatasset-mesh",
     "crates/flatasset-tex",
     "crates/flatasset-world",
+    "crates/flatasset-audio",
     "crates/flatasset-cli",
 ]
 resolver = "2"
@@ -22,6 +23,7 @@ flatasset-core = { path = "crates/flatasset-core", version = "0.2.1" }
 flatasset-mesh = { path = "crates/flatasset-mesh", version = "0.2.1" }
 flatasset-tex = { path = "crates/flatasset-tex", version = "0.2.1" }
 flatasset-world = { path = "crates/flatasset-world", version = "0.2.1" }
+flatasset-audio = { path = "crates/flatasset-audio", version = "0.2.1" }
 flatdemo-core = { git = "https://github.com/flat-formats-rs/flat-formats-demo.git", branch = "dev", version = "0.1.0" }
 
 silicon-kit = { git = "https://github.com/ulquiorracode/silicon-kit-rs.git", branch = "dev", default-features = false, features = ["bits", "snorm", "f16c", "zerocopy", "streaming"] }
