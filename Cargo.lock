@@ -464,6 +464,7 @@ dependencies = [
  "flatasset-tex",
  "flatasset-world",
  "flatdemo-core",
+ "image",
  "memmap2",
 ]
 

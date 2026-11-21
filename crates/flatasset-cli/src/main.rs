@@ -57,6 +57,22 @@ enum Commands {
         /// Path to the shared pool .flb file
         pool: PathBuf,
     },
+    /// Converts textures from a GoldSrc WAD3 archive into FlatTex (.flt) Direct-DMA packages
+    ConvertWad {
+        /// Path to the .wad file
+        wad: PathBuf,
+        /// Output directory for .flt files
+        #[arg(short, long)]
+        out_dir: PathBuf,
+    },
+    /// Converts a 6-face skybox (TGA/BMP files: *bk, *dn, *ft, *lf, *rt, *up) into a FlatTex Cubemap
+    ConvertSkybox {
+        /// Path prefix to the 6 skybox faces (e.g. `cstrike/gfx/env/desert`)
+        prefix: PathBuf,
+        /// Output path for the .flt cubemap
+        #[arg(short, long)]
+        output: PathBuf,
+    },
     /// Microbenchmark for zero-copy inspection across assets
     BenchIdentify {
         /// Path to asset file
@@ -338,6 +354,181 @@ fn main() -> Result<()> {
                     i, item.name_hash, kind, item.byte_length, item.uncompressed_size
                 );
             }
+        }
+        Commands::ConvertWad { wad, out_dir } => {
+            println!("=== GoldSrc WAD3 to FlatTex Converter ===");
+            let data = std::fs::read(&wad).with_context(|| format!("Failed to read {:?}", wad))?;
+            if data.len() < 12 || &data[0..4] != b"WAD3" {
+                anyhow::bail!("Invalid WAD3 signature: {:?}", &data[0..4.min(data.len())]);
+            }
+
+            let num_lumps = u32::from_le_bytes(data[4..8].try_into()?) as usize;
+            let dir_offset = u32::from_le_bytes(data[8..12].try_into()?) as usize;
+
+            println!("WAD: {:?} (Lumps: {})", wad, num_lumps);
+            std::fs::create_dir_all(&out_dir)?;
+
+            let mut converted = 0;
+            for i in 0..num_lumps {
+                let base = dir_offset + i * 32;
+                if base + 32 > data.len() {
+                    break;
+                }
+                let file_offset = u32::from_le_bytes(data[base..base + 4].try_into()?) as usize;
+                let disk_size = u32::from_le_bytes(data[base + 4..base + 8].try_into()?) as usize;
+                let lump_type = data[base + 12];
+                let name = data[base + 16..base + 32]
+                    .split(|&b| b == 0)
+                    .next()
+                    .unwrap_or_default();
+                let name_str = String::from_utf8_lossy(name).to_string();
+
+                // 0x43 is GoldSrc MIP texture
+                if lump_type == 0x43 && file_offset + disk_size <= data.len() {
+                    let tex_data = &data[file_offset..file_offset + disk_size];
+                    if tex_data.len() < 40 {
+                        continue;
+                    }
+                    let width = u32::from_le_bytes(tex_data[16..20].try_into()?);
+                    let height = u32::from_le_bytes(tex_data[20..24].try_into()?);
+                    let mip0_off = u32::from_le_bytes(tex_data[24..28].try_into()?) as usize;
+
+                    if width == 0 || height == 0 || mip0_off >= tex_data.len() {
+                        continue;
+                    }
+
+                    // Palette is at end of MIP texture: 2 bytes num_colors + 256*3 RGB
+                    let total_pixels = (width * height) as usize;
+                    let mip1_pixels = (width / 2 * height / 2) as usize;
+                    let mip2_pixels = (width / 4 * height / 4) as usize;
+                    let mip3_pixels = (width / 8 * height / 8) as usize;
+                    let pal_offset =
+                        mip0_off + total_pixels + mip1_pixels + mip2_pixels + mip3_pixels + 2;
+
+                    if pal_offset + 768 > tex_data.len() {
+                        continue;
+                    }
+
+                    let palette = &tex_data[pal_offset..pal_offset + 768];
+                    let indices = &tex_data[mip0_off..mip0_off + total_pixels];
+
+                    // Decode to RGBA8
+                    let mut rgba = vec![255u8; total_pixels * 4];
+                    for (px_idx, &pal_idx) in indices.iter().enumerate() {
+                        let c_idx = (pal_idx as usize) * 3;
+                        let r = palette[c_idx];
+                        let g = palette[c_idx + 1];
+                        let b = palette[c_idx + 2];
+                        let out_idx = px_idx * 4;
+                        rgba[out_idx] = r;
+                        rgba[out_idx + 1] = g;
+                        rgba[out_idx + 2] = b;
+                        // Blue-screen transparency for '{' prefixed textures
+                        if name_str.starts_with('{') && r == 0 && g == 0 && b == 255 {
+                            rgba[out_idx + 3] = 0;
+                        }
+                    }
+
+                    // Encode to Direct-DMA BC1
+                    let (dma_bytes, aligned_pitch, rows) =
+                        flatasset_tex::encode_rgba_to_bc1_dma(width, height, &rgba);
+                    let mut builder = flatasset_tex::FlatTexBuilder::new_2d(
+                        width as u16,
+                        height as u16,
+                        flatasset_tex::VkFormat::Bc1RgbUnormBlock,
+                    );
+                    builder.add_mip(flatasset_tex::MipInput {
+                        width,
+                        height,
+                        dma_bytes,
+                        aligned_row_pitch: aligned_pitch,
+                        rows_per_image: rows,
+                    });
+
+                    if let Ok(flt_bytes) = builder.build() {
+                        let clean_name = name_str.replace(['/', '\\'], "_");
+                        let out_file = out_dir.join(format!("{}.flt", clean_name));
+                        std::fs::write(&out_file, &flt_bytes)?;
+                        converted += 1;
+                    }
+                }
+            }
+            println!(
+                "Converted {} MIP textures to Direct-DMA FlatTex (.flt)!",
+                converted
+            );
+        }
+        Commands::ConvertSkybox { prefix, output } => {
+            println!("=== Skybox 6-Face to FlatTex Cubemap Converter ===");
+            let suffixes = ["ft", "bk", "up", "dn", "rt", "lf"];
+            let mut face_images = Vec::new();
+            let mut cubemap_w = 0u32;
+            let mut cubemap_h = 0u32;
+
+            for suffix in &suffixes {
+                let prefix_str = prefix.to_string_lossy();
+                let path_tga = PathBuf::from(format!("{}{}.tga", prefix_str, suffix));
+                let path_bmp = PathBuf::from(format!("{}{}.bmp", prefix_str, suffix));
+
+                let path_to_load = if path_tga.exists() {
+                    path_tga
+                } else if path_bmp.exists() {
+                    path_bmp
+                } else {
+                    anyhow::bail!(
+                        "Missing skybox face: neither {:?} nor {:?} found",
+                        path_tga,
+                        path_bmp
+                    );
+                };
+
+                let img = image::open(&path_to_load)
+                    .with_context(|| format!("Failed to load skybox face {:?}", path_to_load))?
+                    .to_rgba8();
+
+                let (w, h) = img.dimensions();
+                if cubemap_w == 0 {
+                    cubemap_w = w;
+                    cubemap_h = h;
+                } else if cubemap_w != w || cubemap_h != h {
+                    anyhow::bail!("Cubemap face dimension mismatch in {:?}", path_to_load);
+                }
+
+                face_images.push(img.into_raw());
+            }
+
+            let mut builder = flatasset_tex::FlatTexBuilder::new_cubemap(
+                cubemap_w as u16,
+                cubemap_h as u16,
+                flatasset_tex::VkFormat::Bc1RgbUnormBlock,
+            );
+
+            for (face_idx, rgba) in face_images.iter().enumerate() {
+                let (dma_bytes, aligned_pitch, rows) =
+                    flatasset_tex::encode_rgba_to_bc1_dma(cubemap_w, cubemap_h, rgba);
+                builder.add_mip(flatasset_tex::MipInput {
+                    width: cubemap_w,
+                    height: cubemap_h,
+                    dma_bytes,
+                    aligned_row_pitch: aligned_pitch,
+                    rows_per_image: rows,
+                });
+                println!(
+                    "  Face {}: {} (aligned pitch: {}B)",
+                    face_idx, suffixes[face_idx], aligned_pitch
+                );
+            }
+
+            let flt_bytes = builder.build().map_err(|e| anyhow::anyhow!("{:?}", e))?;
+            if let Some(parent) = output.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(&output, &flt_bytes)?;
+            println!(
+                "Successfully generated Cubemap FlatTex {:?} ({} KB, 6 faces)!",
+                output,
+                flt_bytes.len() / 1024
+            );
         }
         Commands::BenchIdentify { file, iterations } => {
             let data = std::fs::read(&file)?;
