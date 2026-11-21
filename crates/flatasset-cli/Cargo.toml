@@ -21,3 +21,4 @@ flatdemo-core = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 memmap2 = { workspace = true }
+blake3 = { workspace = true }

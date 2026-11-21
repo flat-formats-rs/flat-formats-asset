@@ -84,3 +84,46 @@ fn test_flatbundle_rejects_out_of_bounds_item_payload() {
         Err(flatasset_core::bundle::FlatBundleError::ItemRangeOutOfBounds { .. })
     ));
 }
+
+#[test]
+fn test_cas_reference_and_pool_deduplication() {
+    use flatasset_core::{FlatBundleBuilder, FlatBundleView, FlatCasPool};
+
+    let shared_texture_data = b"FLTT_shared_brick_wall_texture_direct_dma_4096";
+    let hash = blake3::hash(shared_texture_data);
+    let hash_bytes = *hash.as_bytes();
+
+    // 1. Create a shared pool bundle containing the shared texture
+    let mut pool_builder = FlatBundleBuilder::new();
+    let mut hash_prefix = [0u8; 8];
+    hash_prefix.copy_from_slice(&hash_bytes[..8]);
+    let texture_hash_id = u64::from_le_bytes(hash_prefix);
+    pool_builder.add_asset(texture_hash_id, shared_texture_data, false);
+    let pool_bytes = pool_builder.build();
+
+    let pool_view = FlatBundleView::new(&pool_bytes).expect("mount pool bundle");
+    let mut cas_pool = FlatCasPool::new();
+    let registered = cas_pool.register_bundle(&pool_view).expect("register pool");
+    assert_eq!(registered, 1);
+    assert_eq!(cas_pool.len(), 1);
+
+    // 2. Create map_a.flb with CAS reference instead of duplicate inline texture
+    let mut map_a_builder = FlatBundleBuilder::new();
+    map_a_builder.add_asset(1, b"FLW\x00_map_a_geometry", false);
+    map_a_builder.add_cas_reference(hash_bytes, 0x54544C46, shared_texture_data.len() as u64);
+    let map_a_bytes = map_a_builder.build();
+
+    let map_a_view = FlatBundleView::new(&map_a_bytes).expect("mount map_a");
+    assert_eq!(map_a_view.items().len(), 2);
+
+    let cas_item = &map_a_view.items()[1];
+    assert!(cas_item.is_cas_reference());
+    assert_eq!(cas_item.byte_length, 0); // 0 bytes inline on disk!
+    assert_eq!(cas_item.name_hash, texture_hash_id);
+
+    // 3. Resolve CAS reference from the pool
+    let resolved = cas_pool
+        .resolve_item(cas_item, &map_a_view)
+        .expect("resolve from CAS pool");
+    assert_eq!(resolved, shared_texture_data);
+}
